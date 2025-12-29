@@ -53,24 +53,56 @@
     - `MainWindow` 관련 파일을 프로젝트 루트에서 `Macro/Views` 폴더로 이동.
     - 네임스페이스를 `Macro.Views`로 통일하여 MVVM 구조 정립.
 
+### 3.4. 레시피 관리 기능 구현 (Recipe Management) - [New]
+- **기능 개요**: JSON 파일 기반의 레시피 생성(Create), 삭제(Delete), 목록 조회(Read).
+- **데이터 모델**: `RecipeItem` (파일명 `FileName`, 전체 경로 `FilePath`).
+- **저장소 정책**: 실행 파일 상위(`..`)의 `Recipe` 폴더를 자동 생성하여 사용.
+- **UI 구성**:
+  - `RecipeView`: 좌측 ListBox(목록), 하단 버튼(생성/삭제), 우측 상세 정보 표시.
+  - `InputWindow`: 레시피 생성 시 이름을 입력받는 모달 팝업 구현.
+
+### 3.5. 심화 트러블슈팅 및 리팩토링 (Refactoring & Deep Troubleshooting) - [New]
+1.  **XAML 빌드 오류 (ReactiveUserControl 제네릭 이슈)**
+    - **증상**: `RecipeView.xaml`에서 `ReactiveUserControl<RecipeViewModel>` 사용 시 `MC3074` 오류 발생 (네임스페이스 인식 불가).
+    - **해결**: 참조 프로젝트(`SG_Aurora_E_Pjt_RIVETING`)의 스타일을 적용하여 구조 변경.
+      - `ReactiveUserControl` 대신 표준 **`UserControl`** 상속.
+      - **`IViewFor<TViewModel>` 인터페이스를 수동으로 구현**.
+      - `DependencyProperty`를 사용하여 `ViewModel` 변경 시 `DataContext`가 자동 업데이트되도록 처리.
+
+2.  **커맨드 바인딩 작동 실패 (Command Not Firing)**
+    - **증상**: 버튼을 클릭해도 `CreateCommand`가 실행되지 않고 브레이크 포인트가 잡히지 않음.
+    - **원인 1 (초기화 순서)**: ViewModel 생성자에서 파일 로드(`LoadRecipes`) 중 예외가 발생하거나 로직이 길어지면 `CreateCommand` 초기화가 지연되거나 건너뛰어짐.
+    - **원인 2 (Interaction 타이밍)**: `WhenActivated` 시점에 ViewModel 연결이 불안정하여 Interaction 핸들러 등록 실패.
+    - **해결**:
+      - `CreateCommand` 초기화를 생성자 **최상단**으로 이동.
+      - 파일 로드 로직에 `try-catch`를 적용하여 예외 발생 시에도 뷰모델 생성이 완료되도록 보장.
+      - Interaction 등록을 `WhenActivated` 대신 **`Loaded` 이벤트**로 변경하여 안정성 확보.
+
+3.  **파일 잠금(File Lock)으로 인한 빌드 실패**
+    - **증상**: "The process cannot access the file ... because it is being used by another process."
+    - **해결**: 실행 중인 `Macro.exe` 프로세스를 종료(`taskkill`) 후 빌드 수행.
+
 ## 4. 최종 프로젝트 구조
 ```
 D:\test\Macro\Macro\
+├── Models\              // [New]
+│   └── RecipeItem.cs    // 레시피 데이터 모델
 ├── ViewModels\
 │   ├── MainWindowViewModel.cs
 │   ├── DashboardViewModel.cs
-│   ├── RecipeViewModel.cs
+│   ├── RecipeViewModel.cs // [Updated] 레시피 로직 (CRUD, Interaction)
 │   └── TeachingViewModel.cs
 ├── Views\
 │   ├── MainWindow.xaml (+.cs)
 │   ├── DashboardView.xaml (+.cs)
-│   ├── RecipeView.xaml (+.cs)
-│   └── TeachingView.xaml (+.cs)
-├── App.xaml (+.cs)      // 부트스트래핑 & DI 설정
-├── AppViewLocator.cs    // 뷰 로케이터 구현체
-└── MainUiViewLocator.cs // 뷰 등록 헬퍼 (참조 코드 스타일)
+│   ├── RecipeView.xaml (+.cs) // [Refactored] UserControl + IViewFor 구조
+│   ├── TeachingView.xaml (+.cs)
+│   └── InputWindow.xaml (+.cs) // [New] 이름 입력 팝업
+├── App.xaml (+.cs)
+├── AppViewLocator.cs
+└── MainUiViewLocator.cs
 ```
 
 ## 5. 향후 참고 사항
-- 새로운 화면 추가 시 `MainUiViewLocator.cs`에 `Locator.CurrentMutable.Register` 코드를 추가해야 함.
-- 만약 Splat 기반 자동 찾기가 안 될 경우 `AppViewLocator.cs`의 `switch` 문에도 추가해야 함.
+- **View 구현 패턴**: `ReactiveUserControl` 사용 시 제네릭 문제가 발생하면, `UserControl` + `IViewFor<T>` 구현 패턴(참조 프로젝트 방식)을 우선적으로 고려한다.
+- **ViewModel 안전성**: 생성자 내 파일 I/O 등 위험한 작업은 `try-catch`로 감싸고, 커맨드 초기화는 항상 생성자 앞부분에 배치한다.

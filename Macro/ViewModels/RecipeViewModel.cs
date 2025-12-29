@@ -47,20 +47,28 @@ namespace Macro.ViewModels
         {
             HostScreen = hostScreen;
 
-            // 경로 설정: 실행 파일 상위 폴더의 Recipe
-            _recipeDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Recipe");
-            _recipeDirectory = Path.GetFullPath(_recipeDirectory); // 정규 경로로 변환
-
-            // 초기화
-            InitializeDirectory();
-            LoadRecipes();
-
-            // 커맨드 구성
+            // 커맨드 구성 (가장 먼저 초기화하여 바인딩 오류 방지)
             CreateCommand = ReactiveCommand.CreateFromTask(CreateRecipeAsync);
             
             // 삭제는 선택된 항목이 있을 때만 가능
             var canDelete = this.WhenAnyValue(x => x.SelectedRecipe).Select(x => x != null);
             DeleteCommand = ReactiveCommand.Create(DeleteRecipe, canDelete);
+
+            // 경로 설정: 실행 파일 상위 폴더의 Recipe
+            _recipeDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Recipe");
+            _recipeDirectory = Path.GetFullPath(_recipeDirectory); // 정규 경로로 변환
+
+            try
+            {
+                // 초기화
+                InitializeDirectory();
+                LoadRecipes();
+            }
+            catch (Exception ex)
+            {
+                // 로드 실패 시 로그를 남기거나 처리 (현재는 무시하되 생성자는 완료됨)
+                System.Diagnostics.Debug.WriteLine($"Error loading recipes: {ex.Message}");
+            }
         }
 
         #endregion
@@ -75,7 +83,7 @@ namespace Macro.ViewModels
             }
         }
 
-        private void LoadRecipes()
+        public void LoadRecipes()
         {
             Recipes.Clear();
             var files = Directory.GetFiles(_recipeDirectory, "*.json");

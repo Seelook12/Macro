@@ -7,6 +7,9 @@
              mc:Ignorable="d" 
              d:DataContext="{d:DesignInstance Type=vm:DashboardViewModel}"
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
     <Grid Background="#1E1E1E">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -24,6 +27,18 @@
                 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="DASHBOARD" Foreground="#007ACC" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                    
+                    <StackPanel Orientation="Horizontal" Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border Background="#3E3E42" CornerRadius="4" Padding="8,4" Margin="0,0,10,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="STEP " Foreground="#D4D4D4" FontSize="12"/>
+                                <TextBlock Text="{Binding CurrentStepIndex}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                                <TextBlock Text=" / " Foreground="#D4D4D4" FontSize="12"/>
+                                <TextBlock Text="{Binding TotalStepCount}" Foreground="#D4D4D4" FontSize="12"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{Binding CurrentStepName}" Foreground="#D4D4D4" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -40,6 +55,11 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- Progress Bar (Only visible when running) -->
+        <ProgressBar Grid.Row="0" VerticalAlignment="Bottom" Height="3" BorderThickness="0" Background="Transparent" Foreground="#007ACC"
+                     Minimum="0" Maximum="{Binding TotalStepCount}" Value="{Binding CurrentStepIndex}"
+                     Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
         <!-- Log Area -->
         <Border Grid.Row="1" Margin="10" Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1">

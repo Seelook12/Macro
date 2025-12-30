@@ -37,6 +37,15 @@ namespace Macro.ViewModels
         private readonly ObservableAsPropertyHelper<string> _statusMessage;
         public string StatusMessage => _statusMessage.Value;
 
+        private readonly ObservableAsPropertyHelper<string> _currentStepName;
+        public string CurrentStepName => _currentStepName.Value;
+
+        private readonly ObservableAsPropertyHelper<int> _currentStepIndex;
+        public int CurrentStepIndex => _currentStepIndex.Value;
+
+        private readonly ObservableAsPropertyHelper<int> _totalStepCount;
+        public int TotalStepCount => _totalStepCount.Value;
+
 
         public DashboardViewModel(IScreen screen)
         {
@@ -53,6 +62,18 @@ namespace Macro.ViewModels
                 .WhenAnyValue(x => x.IsRunning)
                 .Select(running => running ? "실행 중..." : "대기")
                 .ToProperty(this, x => x.StatusMessage);
+
+            _currentStepName = _engineService
+                .WhenAnyValue(x => x.CurrentStepName)
+                .ToProperty(this, x => x.CurrentStepName);
+
+            _currentStepIndex = _engineService
+                .WhenAnyValue(x => x.CurrentStepIndex)
+                .ToProperty(this, x => x.CurrentStepIndex);
+
+            _totalStepCount = _engineService
+                .WhenAnyValue(x => x.TotalStepCount)
+                .ToProperty(this, x => x.TotalStepCount);
 
             // RunCommand: 실행 중이 아닐 때만 가능
             var canRun = _engineService.WhenAnyValue(x => x.IsRunning).Select(running => !running);

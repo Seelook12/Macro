@@ -14,6 +14,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(DelayCondition), typeDiscriminator: nameof(DelayCondition))]
     [JsonDerivedType(typeof(ImageMatchCondition), typeDiscriminator: nameof(ImageMatchCondition))]
     [JsonDerivedType(typeof(GrayChangeCondition), typeDiscriminator: nameof(GrayChangeCondition))]
+    [JsonDerivedType(typeof(VariableCompareCondition), typeDiscriminator: nameof(VariableCompareCondition))]
     public interface IMacroCondition
     {
         Task<bool> CheckAsync();
@@ -24,6 +25,7 @@ namespace Macro.Models
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
     [JsonDerivedType(typeof(MouseClickAction), typeDiscriminator: nameof(MouseClickAction))]
     [JsonDerivedType(typeof(KeyPressAction), typeDiscriminator: nameof(KeyPressAction))]
+    [JsonDerivedType(typeof(VariableSetAction), typeDiscriminator: nameof(VariableSetAction))]
     public interface IMacroAction
     {
         Task ExecuteAsync(System.Windows.Point? conditionPoint = null);
@@ -65,6 +67,7 @@ namespace Macro.Models
         private string _imagePath = string.Empty;
         private double _threshold = 0.9;
         private string _failJumpName = string.Empty;
+        private string _resultVariableName = string.Empty;
         
         // ROI Properties
         private bool _useRegion;
@@ -89,6 +92,12 @@ namespace Macro.Models
         {
             get => _failJumpName;
             set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string ResultVariableName
+        {
+            get => _resultVariableName;
+            set => this.RaiseAndSetIfChanged(ref _resultVariableName, value);
         }
 
         public bool UseRegion
@@ -159,6 +168,11 @@ namespace Macro.Models
 
                     // 2. 이미지 서치
                     var result = ImageSearchService.FindImage(capture, ImagePath, Threshold, roi);
+
+                    if (!string.IsNullOrEmpty(ResultVariableName))
+                    {
+                        MacroEngineService.Instance.Variables[ResultVariableName] = result.HasValue ? "True" : "False";
+                    }
 
                     if (result.HasValue)
                     {
@@ -262,6 +276,69 @@ namespace Macro.Models
                 catch
                 {
                     return false;
+                }
+            });
+        }
+    }
+
+    public class VariableCompareCondition : ReactiveObject, IMacroCondition
+    {
+        private string _variableName = string.Empty;
+        private string _operator = "=="; // ==, !=, >, <, >=, <=, Contains
+        private string _targetValue = string.Empty;
+        private string _failJumpName = string.Empty;
+
+        public string VariableName
+        {
+            get => _variableName;
+            set => this.RaiseAndSetIfChanged(ref _variableName, value);
+        }
+
+        public string Operator
+        {
+            get => _operator;
+            set => this.RaiseAndSetIfChanged(ref _operator, value);
+        }
+
+        public string TargetValue
+        {
+            get => _targetValue;
+            set => this.RaiseAndSetIfChanged(ref _targetValue, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public System.Windows.Point? FoundPoint => null;
+
+        public async Task<bool> CheckAsync()
+        {
+            return await Task.Run(() =>
+            {
+                var vars = MacroEngineService.Instance.Variables;
+                string currentValue = vars.ContainsKey(VariableName) ? vars[VariableName] : string.Empty;
+
+                switch (Operator)
+                {
+                    case "==": return currentValue == TargetValue;
+                    case "!=": return currentValue != TargetValue;
+                    case "Contains": return currentValue.Contains(TargetValue);
+                    case ">":
+                    case "<":
+                    case ">=":
+                    case "<=":
+                        if (double.TryParse(currentValue, out double cur) && double.TryParse(TargetValue, out double tar))
+                        {
+                            if (Operator == ">") return cur > tar;
+                            if (Operator == "<") return cur < tar;
+                            if (Operator == ">=") return cur >= tar;
+                            if (Operator == "<=") return cur <= tar;
+                        }
+                        return false;
+                    default: return false;
                 }
             });
         }
@@ -373,6 +450,62 @@ namespace Macro.Models
                 catch
                 {
                     // 변환 실패 무시
+                }
+            });
+        }
+    }
+
+    public class VariableSetAction : ReactiveObject, IMacroAction
+    {
+        private string _variableName = string.Empty;
+        private string _value = string.Empty;
+        private string _operation = "Set"; // Set, Add, Sub
+        private string _failJumpName = string.Empty;
+
+        public string VariableName
+        {
+            get => _variableName;
+            set => this.RaiseAndSetIfChanged(ref _variableName, value);
+        }
+
+        public string Value
+        {
+            get => _value;
+            set => this.RaiseAndSetIfChanged(ref _value, value);
+        }
+
+        public string Operation
+        {
+            get => _operation;
+            set => this.RaiseAndSetIfChanged(ref _operation, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        {
+            await Task.Run(() =>
+            {
+                var vars = MacroEngineService.Instance.Variables;
+                if (string.IsNullOrEmpty(VariableName)) return;
+
+                if (Operation == "Set")
+                {
+                    vars[VariableName] = Value;
+                }
+                else if (Operation == "Add" || Operation == "Sub")
+                {
+                    double current = 0;
+                    if (vars.ContainsKey(VariableName)) double.TryParse(vars[VariableName], out current);
+                    double val = 0;
+                    double.TryParse(Value, out val);
+
+                    if (Operation == "Add") vars[VariableName] = (current + val).ToString();
+                    else vars[VariableName] = (current - val).ToString();
                 }
             });
         }

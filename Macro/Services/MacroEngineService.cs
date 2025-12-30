@@ -45,6 +45,29 @@ namespace Macro.Services
 
         public ObservableCollection<string> Logs { get; }
 
+        public Dictionary<string, string> Variables { get; } = new Dictionary<string, string>();
+
+        private string _currentStepName = string.Empty;
+        public string CurrentStepName
+        {
+            get => _currentStepName;
+            private set => this.RaiseAndSetIfChanged(ref _currentStepName, value);
+        }
+
+        private int _currentStepIndex;
+        public int CurrentStepIndex
+        {
+            get => _currentStepIndex;
+            private set => this.RaiseAndSetIfChanged(ref _currentStepIndex, value);
+        }
+
+        private int _totalStepCount;
+        public int TotalStepCount
+        {
+            get => _totalStepCount;
+            private set => this.RaiseAndSetIfChanged(ref _totalStepCount, value);
+        }
+
         // Methods
         public async Task RunAsync(IEnumerable<SequenceItem> sequences)
         {
@@ -58,6 +81,7 @@ namespace Macro.Services
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
 
+            Variables.Clear();
             AddLog("=== 매크로 실행 시작 ===");
 
             try
@@ -67,6 +91,7 @@ namespace Macro.Services
                 {
                     var sequenceList = new List<SequenceItem>(sequences);
                     int currentIndex = 0;
+                    TotalStepCount = sequenceList.Count;
 
                     while (currentIndex < sequenceList.Count)
                     {
@@ -74,6 +99,8 @@ namespace Macro.Services
 
                         var item = sequenceList[currentIndex];
                         int stepIndex = currentIndex + 1;
+                        CurrentStepIndex = stepIndex;
+                        CurrentStepName = item.Name;
 
                         if (!item.IsEnabled)
                         {
@@ -258,6 +285,9 @@ namespace Macro.Services
             finally
             {
                 IsRunning = false;
+                CurrentStepName = string.Empty;
+                CurrentStepIndex = 0;
+                TotalStepCount = 0;
                 _cts?.Dispose();
                 _cts = null;
             }

@@ -73,16 +73,60 @@
     - **Randomization**: 목표 좌표에 미세 오차(±1px) 부여, 클릭 유지 시간 및 더블 클릭 간격에 랜덤 지연 적용.
     - **Reliability**: 클릭 전후의 짧은 대기 시간을 랜덤하게 부여하여 시스템 및 대상 프로그램의 반응 안정성 확보.
 
-### 3.12. 조건부 분기 (Conditional Branching) 구현 (2025-12-30)
-- **Logic**: `SequenceItem`에 `SuccessJumpName` 및 `FailJumpName` 속성을 추가하여 실행 흐름 제어 지원.
-- **Engine**: `MacroEngineService`의 실행 루프를 `foreach`에서 `while` 인덱스 제어 방식으로 변경하여 특정 스텝으로의 '점프' 및 '루프' 구현 가능.
-- **UI**: `TeachingView`에 성공/실패 시 점프 대상을 선택할 수 있는 ComboBox 추가. `TeachingViewModel`에서 현재 레시피의 스텝 이름 목록을 실시간 동기화하여 제공.
+### 3.12. 조건부 분기 (Conditional Branching) 고도화 (2025-12-30)
+
+- **Granular Flow Control**: `Pre-Condition`, `Action`, `Post-Condition` 각각에 실패 시 점프할 수 있는 `FailJumpName` 설정을 추가하여 정밀한 예외 처리 지원.
+
+- **Success Path**: 모든 단계 성공 시에만 수행되는 `SuccessJumpName` (Flow Control) 로직 구현.
+
+- **Explicit Options**: `(Next Step)`, `(Ignore & Continue)`, `(Stop Execution)` 등 명시적인 흐름 제어 옵션을 제공하여 엔진 안정성 확보.
+
+- **Engine Upgrade**: 실행 루프를 인덱스 제어 방식으로 전환하여 자유로운 스텝 점프 및 루프 시나리오 지원.
+
+
+
+### 3.13. GrayChangeCondition (화면 변화 감지) 추가 (2025-12-30)
+
+- **Logic**: 지정된 영역의 평균 밝기(Gray Scale) 변화량을 측정하여 동작 전후의 상태 변화를 검증.
+
+- **Engine Injection**: `Action` 실행 직전의 스냅샷을 찍어 `ReferenceValue`를 조건 객체에 자동 주입하는 파이프라인 구축 (동적 변화량 측정).
+
+- **UI Enhancement**:
+
+    - `Pick Region` 기능을 통합하여 화면 드래그로 검사 영역 설정 가능.
+
+    - `DelayMs` 속성을 추가하여 액션 후 화면 갱신 대기 시간 보장.
+
+
+
+### 3.14. 시스템 설정 및 지속성 (Persistence) (2025-12-30)
+- **Settings**: `Setting/appsettings.json` 파일을 통해 애플리케이션 환경 설정 저장.
+- **History**: 마지막으로 사용한 레시피 이름을 저장하고, 앱 재시작 시 해당 레시피를 자동으로 선택(Load)하여 사용자 편의성 제공.
+- **Structure**: `SettingsManager` 유틸리티를 통한 싱글톤 형태의 설정 관리 체계 구축.
+
+### 3.15. 변수 시스템 및 실행 현황 시각화 (2025-12-30)
+- **Runtime Variables**: `MacroEngineService` 내부에 `Dictionary<string, string>` 기반의 변수 저장소 구현.
+- **Variable Operations**:
+    - `VariableSetAction`: 변수 값 설정, 더하기(Add), 빼기(Sub) 연산 지원.
+    - `VariableCompareCondition`: 변수 값 비교(==, !=, >, <, Contains)를 통한 조건부 분기 지원.
+- **Condition Integration**: `ImageMatchCondition` 성공 여부를 지정된 변수에 즉시 저장하는 기능 추가.
+- **Dashboard UI Upgrade**:
+    - **Progress Tracking**: 현재 실행 중인 스텝 이름, 인덱스, 전체 스텝 수를 상단 패널에 실시간 표시.
+    - **Visual Feedback**: `ProgressBar`를 통해 전체 시퀀스의 진행률을 시각화.
+    - **Auto Scroll**: 로그 발생 시 최신 로그 위치로 자동 스크롤되는 UX 개선.
 
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
-- **경고**: NU1701 (ReactiveUI 버전 호환성) 및 일부 nullability 경고 존재하나 실행 안정성 확보됨.
+- **주요 해결 사항**: 
+    - 프로세스 점유로 인한 빌드 실패(`Macro.exe` 파일 잠금) 해결.
+    - 변수 시스템 도입으로 복합 로직 구현 가능성 확보.
+
+
 
 ## 5. 향후 계획
-- **조건부 분기(Branching)**: 특정 조건 만족 시 다른 스텝으로 점프하는 로직 추가.
-- **스크립트 지원**: 복잡한 계산이나 로직 처리를 위한 간단한 C# 스크립트 실행 기능.
-- **UI 개선**: 다크 모드 지원 및 로그 시각화 강화.
+
+- **조건부 분기(Branching)**: 변수 비교 및 복합 조건 지원.
+
+- **스크립트 지원**: C# 스크립트 엔진(Roslyn) 연동 검토.
+
+- **UI 개선**: 다크 모드 및 실행 로그 내 변화량 수치 시각화.

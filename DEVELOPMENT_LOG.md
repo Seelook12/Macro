@@ -109,11 +109,21 @@
 - **Variable Operations**:
     - `VariableSetAction`: 변수 값 설정, 더하기(Add), 빼기(Sub) 연산 지원.
     - `VariableCompareCondition`: 변수 값 비교(==, !=, >, <, Contains)를 통한 조건부 분기 지원.
+- **IdleAction**: 마우스/키보드 제어 없이 지정된 시간만큼 대기하거나, 조건 확인용 스텝 구성을 위한 "아무것도 하지 않는 액션" 추가.
 - **Condition Integration**: `ImageMatchCondition` 성공 여부를 지정된 변수에 즉시 저장하는 기능 추가.
 - **Dashboard UI Upgrade**:
     - **Progress Tracking**: 현재 실행 중인 스텝 이름, 인덱스, 전체 스텝 수를 상단 패널에 실시간 표시.
     - **Visual Feedback**: `ProgressBar`를 통해 전체 시퀀스의 진행률을 시각화.
     - **Auto Scroll**: 로그 발생 시 최신 로그 위치로 자동 스크롤되는 UX 개선.
+
+5. **Fatal User Callback Exception (0xc000041d)**
+    - 증상: 매크로 실행 중 `TargetInvocationException`과 함께 프로그램이 즉시 종료됨.
+    - 원인: 
+        1) 백그라운드 스레드에서 업데이트된 엔진 속성이 UI 마샬링 없이 바인딩에 전달됨.
+        2) View 활성화 시 `ViewModel` 할당 및 `DataContext` 설정 과정이 비동기적으로 발생하며 UI 스레드 위반 발생.
+    - 해결: 
+        1) `DashboardViewModel`의 속성 헬퍼에 `ObserveOn(RxApp.MainThreadScheduler)` 추가.
+        2) 모든 View(`DashboardView`, `RecipeView`, `TeachingView`)의 `WhenActivated` 내 `BindTo` 호출 전에 `ObserveOn(RxApp.MainThreadScheduler)`을 추가하여 UI 요소 접근 안정성 보장.
 
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)

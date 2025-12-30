@@ -32,12 +32,12 @@
                         <Border Background="#3E3E42" CornerRadius="4" Padding="8,4" Margin="0,0,10,0">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="STEP " Foreground="#D4D4D4" FontSize="12"/>
-                                <TextBlock Text="{Binding CurrentStepIndex}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                                <TextBlock Text="{Binding CurrentStepIndex, Mode=OneWay}" Foreground="White" FontWeight="Bold" FontSize="12"/>
                                 <TextBlock Text=" / " Foreground="#D4D4D4" FontSize="12"/>
-                                <TextBlock Text="{Binding TotalStepCount}" Foreground="#D4D4D4" FontSize="12"/>
+                                <TextBlock Text="{Binding TotalStepCount, Mode=OneWay}" Foreground="#D4D4D4" FontSize="12"/>
                             </StackPanel>
                         </Border>
-                        <TextBlock Text="{Binding CurrentStepName}" Foreground="#D4D4D4" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding CurrentStepName, Mode=OneWay}" Foreground="#D4D4D4" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -58,7 +58,7 @@
 
         <!-- Progress Bar (Only visible when running) -->
         <ProgressBar Grid.Row="0" VerticalAlignment="Bottom" Height="3" BorderThickness="0" Background="Transparent" Foreground="#007ACC"
-                     Minimum="0" Maximum="{Binding TotalStepCount}" Value="{Binding CurrentStepIndex}"
+                     Minimum="0" Maximum="{Binding TotalStepCount, Mode=OneWay}" Value="{Binding CurrentStepIndex, Mode=OneWay}"
                      Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
         <!-- Log Area -->

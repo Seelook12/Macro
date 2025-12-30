@@ -1,5 +1,5 @@
 using System.Reactive.Disposables;
-using System.Reactive.Disposables.Fluent;
+using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Macro.ViewModels;
@@ -10,7 +10,6 @@ namespace Macro.Views
 {
     public partial class RecipeView : UserControl, IViewFor<RecipeViewModel>
     {
-        // ... (기존 Dependency Properties) ...
         #region Dependency Properties
 
         public static readonly DependencyProperty ViewModelProperty =
@@ -24,44 +23,51 @@ namespace Macro.Views
 
             this.WhenActivated(disposables =>
             {
-                this.WhenAnyValue(x => x.ViewModel).BindTo(this, x => x.DataContext).DisposeWith(disposables);
+                var d1 = this.WhenAnyValue(x => x.ViewModel)
+                    .ObserveOn(RxApp.MainThreadScheduler)
+                    .Subscribe(vm => DataContext = vm);
+                disposables.Add(d1);
 
-                // 이름 입력 팝업 핸들러
-                ViewModel!.ShowInputName.RegisterHandler(ctx =>
+                if (ViewModel != null)
                 {
-                    var inputWindow = new InputWindow();
-                    if (inputWindow.ShowDialog() == true)
+                    // 이름 입력 팝업 핸들러
+                    var d2 = ViewModel.ShowInputName.RegisterHandler(ctx =>
                     {
-                        ctx.SetOutput(inputWindow.InputText);
-                    }
-                    else
-                    {
-                        ctx.SetOutput(null);
-                    }
-                }).DisposeWith(disposables);
+                        var inputWindow = new InputWindow();
+                        if (inputWindow.ShowDialog() == true)
+                        {
+                            ctx.SetOutput(inputWindow.InputText);
+                        }
+                        else
+                        {
+                            ctx.SetOutput(null);
+                        }
+                    });
+                    disposables.Add(d2);
 
-                // [New] 변경 확인 팝업 핸들러
-                ViewModel!.ConfirmChange.RegisterHandler(ctx =>
-                {
-                    var result = System.Windows.MessageBox.Show(ctx.Input, "레시피 변경", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    ctx.SetOutput(result == MessageBoxResult.Yes);
-                }).DisposeWith(disposables);
+                    // [New] 변경 확인 팝업 핸들러
+                    var d3 = ViewModel.ConfirmChange.RegisterHandler(ctx =>
+                    {
+                        var result = System.Windows.MessageBox.Show(ctx.Input, "레시피 변경", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                        ctx.SetOutput(result == MessageBoxResult.Yes);
+                    });
+                    disposables.Add(d3);
+                }
             });
         }
         
-        // ... (IViewFor 구현) ...
         #region IViewFor Implementation
 
         public RecipeViewModel? ViewModel
         {
-            get => (RecipeViewModel)GetValue(ViewModelProperty);
+            get => GetValue(ViewModelProperty) as RecipeViewModel;
             set => SetValue(ViewModelProperty, value);
         }
 
         object? IViewFor.ViewModel
         {
             get => ViewModel;
-            set => ViewModel = (RecipeViewModel?)value;
+            set => ViewModel = value as RecipeViewModel;
         }
 
         #endregion

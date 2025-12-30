@@ -20,50 +20,55 @@ namespace Macro.Views
 
         #endregion
 
-        public DashboardView()
-        {
-            InitializeComponent();
-
-            this.WhenActivated(disposables =>
-            {
-                // ViewModel과 DataContext를 명시적으로 바인딩
-                this.WhenAnyValue(x => x.ViewModel)
-                    .BindTo(this, x => x.DataContext)
-                    .DisposeWith(disposables);
-
-                if (ViewModel != null)
-                {
-                    // 로그 컬렉션 변경 감지하여 자동 스크롤
-                    Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
-                        h => ViewModel.Logs.CollectionChanged += h,
-                        h => ViewModel.Logs.CollectionChanged -= h)
-                        .ObserveOn(RxApp.MainThreadScheduler)
-                        .Subscribe(_ =>
-                        {
-                            if (ViewModel.Logs.Count > 0)
-                            {
-                                LogListBox.ScrollIntoView(ViewModel.Logs[ViewModel.Logs.Count - 1]);
-                            }
-                        })
-                        .DisposeWith(disposables);
-                }
-            });
-        }
-
         #region IViewFor Implementation
 
         public DashboardViewModel? ViewModel
         {
-            get => (DashboardViewModel)GetValue(ViewModelProperty);
+            get => GetValue(ViewModelProperty) as DashboardViewModel;
             set => SetValue(ViewModelProperty, value);
         }
 
         object? IViewFor.ViewModel
         {
             get => ViewModel;
-            set => ViewModel = (DashboardViewModel?)value;
+            set => ViewModel = value as DashboardViewModel;
         }
 
         #endregion
+
+        public DashboardView()
+        {
+            InitializeComponent();
+
+            this.WhenActivated(disposables =>
+            {
+                // ViewModel이 바뀔 때마다 DataContext를 안전하게 업데이트
+                this.WhenAnyValue(x => x.ViewModel)
+                    .ObserveOn(RxApp.MainThreadScheduler)
+                    .Subscribe(vm => DataContext = vm)
+                    .DisposeWith(disposables);
+
+                // 로그 자동 스크롤 로직을 ViewModel 변경에 대응하도록 개선
+                this.WhenAnyValue(x => x.ViewModel)
+                    .WhereNotNull()
+                    .ObserveOn(RxApp.MainThreadScheduler)
+                    .Subscribe(vm =>
+                    {
+                        Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
+                            h => vm.Logs.CollectionChanged += h,
+                            h => vm.Logs.CollectionChanged -= h)
+                            .ObserveOn(RxApp.MainThreadScheduler)
+                            .Subscribe(_ =>
+                            {
+                                if (vm.Logs.Count > 0)
+                                {
+                                    LogListBox.ScrollIntoView(vm.Logs[vm.Logs.Count - 1]);
+                                }
+                            })
+                            .DisposeWith(disposables);
+                    })
+                    .DisposeWith(disposables);
+            });
+        }
     }
 }

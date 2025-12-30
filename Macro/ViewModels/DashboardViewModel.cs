@@ -55,24 +55,29 @@ namespace Macro.ViewModels
             // IsRunning 상태 동기화
             _isRunning = _engineService
                 .WhenAnyValue(x => x.IsRunning)
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.IsRunning);
 
             // 상태 메시지 동기화
             _statusMessage = _engineService
                 .WhenAnyValue(x => x.IsRunning)
                 .Select(running => running ? "실행 중..." : "대기")
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.StatusMessage);
 
             _currentStepName = _engineService
                 .WhenAnyValue(x => x.CurrentStepName)
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.CurrentStepName);
 
             _currentStepIndex = _engineService
                 .WhenAnyValue(x => x.CurrentStepIndex)
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.CurrentStepIndex);
 
             _totalStepCount = _engineService
                 .WhenAnyValue(x => x.TotalStepCount)
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.TotalStepCount);
 
             // RunCommand: 실행 중이 아닐 때만 가능

@@ -146,7 +146,7 @@ namespace Macro.Services
                                     // 2. Action 실행 전 데이터 주입 (GrayChangeCondition 등)
                                     if (item.PostCondition is GrayChangeCondition gcc)
                                     {
-                                        var preCapture = System.Windows.Application.Current.Dispatcher.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
+                                        var preCapture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
                                         if (preCapture != null)
                                         {
                                             gcc.ReferenceValue = ImageSearchService.GetGrayAverage(preCapture, gcc.X, gcc.Y, gcc.Width, gcc.Height);

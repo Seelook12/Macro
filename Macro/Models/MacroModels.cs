@@ -26,6 +26,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(MouseClickAction), typeDiscriminator: nameof(MouseClickAction))]
     [JsonDerivedType(typeof(KeyPressAction), typeDiscriminator: nameof(KeyPressAction))]
     [JsonDerivedType(typeof(VariableSetAction), typeDiscriminator: nameof(VariableSetAction))]
+    [JsonDerivedType(typeof(IdleAction), typeDiscriminator: nameof(IdleAction))]
     public interface IMacroAction
     {
         Task ExecuteAsync(System.Windows.Point? conditionPoint = null);
@@ -148,7 +149,7 @@ namespace Macro.Models
                 try
                 {
                     // 1. 현재 화면 캡처
-                    var capture = System.Windows.Application.Current.Dispatcher.Invoke(() => 
+                    var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
                     {
                         var bmp = ScreenCaptureHelper.GetScreenCapture();
                         bmp?.Freeze(); // 다른 스레드에서 사용 가능하게 얼림
@@ -259,7 +260,7 @@ namespace Macro.Models
             {
                 try
                 {
-                    var capture = System.Windows.Application.Current.Dispatcher.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
+                    var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
                     if (capture == null) return false;
 
                     double currentValue = ImageSearchService.GetGrayAverage(capture, X, Y, Width, Height);
@@ -508,6 +509,32 @@ namespace Macro.Models
                     else vars[VariableName] = (current - val).ToString();
                 }
             });
+        }
+    }
+
+    public class IdleAction : ReactiveObject, IMacroAction
+    {
+        private int _delayTimeMs;
+        private string _failJumpName = string.Empty;
+
+        public int DelayTimeMs
+        {
+            get => _delayTimeMs;
+            set => this.RaiseAndSetIfChanged(ref _delayTimeMs, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        {
+            if (DelayTimeMs > 0)
+            {
+                await Task.Delay(DelayTimeMs);
+            }
         }
     }
 

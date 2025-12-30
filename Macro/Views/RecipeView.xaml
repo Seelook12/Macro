@@ -28,7 +28,24 @@
 
                 <ListBox ItemsSource="{Binding Recipes}" 
                          SelectedItem="{Binding SelectedRecipe}"
-                         Margin="5"/>
+                         Margin="5">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="Transparent" Padding="5">
+                                <Border.InputBindings>
+                                    <MouseBinding MouseAction="LeftDoubleClick" 
+                                                  Command="{Binding DataContext.SelectCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
+                                </Border.InputBindings>
+                                <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"/>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
 
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5">
                     <Button Content="생성" Command="{Binding CreateCommand}" Width="80" Margin="5"/>

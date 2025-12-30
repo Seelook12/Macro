@@ -1,6 +1,5 @@
-using System;
 using System.Reactive.Disposables;
-using System.Reactive.Linq;
+using System.Reactive.Disposables.Fluent;
 using System.Windows;
 using System.Windows.Controls;
 using Macro.ViewModels;
@@ -10,14 +9,51 @@ namespace Macro.Views
 {
     public partial class RecipeView : UserControl, IViewFor<RecipeViewModel>
     {
-        #region ViewModel Property
+        // ... (기존 Dependency Properties) ...
+        #region Dependency Properties
 
-        public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
-            nameof(ViewModel), typeof(RecipeViewModel), typeof(RecipeView), new PropertyMetadata(null, OnViewModelChanged));
+        public static readonly DependencyProperty ViewModelProperty =
+            DependencyProperty.Register(nameof(ViewModel), typeof(RecipeViewModel), typeof(RecipeView), new PropertyMetadata(null));
+
+        #endregion
+
+        public RecipeView()
+        {
+            InitializeComponent();
+
+            this.WhenActivated(disposables =>
+            {
+                this.WhenAnyValue(x => x.ViewModel).BindTo(this, x => x.DataContext).DisposeWith(disposables);
+
+                // 이름 입력 팝업 핸들러
+                ViewModel!.ShowInputName.RegisterHandler(ctx =>
+                {
+                    var inputWindow = new InputWindow();
+                    if (inputWindow.ShowDialog() == true)
+                    {
+                        ctx.SetOutput(inputWindow.InputText);
+                    }
+                    else
+                    {
+                        ctx.SetOutput(null);
+                    }
+                }).DisposeWith(disposables);
+
+                // [New] 변경 확인 팝업 핸들러
+                ViewModel!.ConfirmChange.RegisterHandler(ctx =>
+                {
+                    var result = MessageBox.Show(ctx.Input, "레시피 변경", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    ctx.SetOutput(result == MessageBoxResult.Yes);
+                }).DisposeWith(disposables);
+            });
+        }
+        
+        // ... (IViewFor 구현) ...
+        #region IViewFor Implementation
 
         public RecipeViewModel? ViewModel
         {
-            get => (RecipeViewModel?)GetValue(ViewModelProperty);
+            get => (RecipeViewModel)GetValue(ViewModelProperty);
             set => SetValue(ViewModelProperty, value);
         }
 
@@ -27,44 +63,6 @@ namespace Macro.Views
             set => ViewModel = (RecipeViewModel?)value;
         }
 
-        private static void OnViewModelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            ((RecipeView)d).DataContext = e.NewValue;
-        }
-
         #endregion
-
-        public RecipeView()
-        {
-            InitializeComponent();
-
-            // Loaded 이벤트에서 Interaction 등록 (참조 프로젝트 방식)
-            this.Loaded += RecipeView_Loaded;
-        }
-
-        private void RecipeView_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (ViewModel == null) return;
-
-            // 목록 로드
-            ViewModel.LoadRecipes();
-
-            // Interaction 핸들러 등록
-            ViewModel.ShowInputName.RegisterHandler(interaction =>
-            {
-                var inputWindow = new InputWindow();
-                var window = Window.GetWindow(this);
-                if (window != null) inputWindow.Owner = window;
-
-                if (inputWindow.ShowDialog() == true)
-                {
-                    interaction.SetOutput(inputWindow.InputText);
-                }
-                else
-                {
-                    interaction.SetOutput(null);
-                }
-            });
-        }
     }
 }

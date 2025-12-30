@@ -15,11 +15,21 @@
         </Grid.RowDefinitions>
 
         <!-- 상단 네비게이션 바 -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Background="#333" Height="50">
-            <Button Content="실행 (대시보드)" Command="{Binding GoDashboard}" Width="120" Margin="10,5"/>
-            <Button Content="레시피 관리" Command="{Binding GoRecipe}" Width="120" Margin="5"/>
-            <Button Content="티칭 (동작생성)" Command="{Binding GoTeaching}" Width="120" Margin="5"/>
-        </StackPanel>
+        <DockPanel Grid.Row="0" Background="#333" Height="50" LastChildFill="False">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                <Button Content="실행 (대시보드)" Command="{Binding GoDashboard}" Width="120" Margin="10,5"/>
+                <Button Content="레시피 관리" Command="{Binding GoRecipe}" Width="120" Margin="5"/>
+                <Button Content="티칭 (동작생성)" Command="{Binding GoTeaching}" Width="120" Margin="5"/>
+            </StackPanel>
+            
+            <TextBlock Text="{Binding CurrentRecipeName}" 
+                       DockPanel.Dock="Right" 
+                       Foreground="White" 
+                       VerticalAlignment="Center" 
+                       Margin="0,0,20,0" 
+                       FontWeight="Bold" 
+                       FontSize="14"/>
+        </DockPanel>
 
         <!-- 중앙 컨텐츠 영역 (라우팅된 뷰가 표시됨) -->
         <rxui:RoutedViewHost x:Name="RoutedViewHost" Grid.Row="1" Router="{Binding Router}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">

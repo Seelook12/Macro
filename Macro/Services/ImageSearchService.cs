@@ -78,5 +78,31 @@ namespace Macro.Services
 
             return null;
         }
+        /// <summary>
+        /// 지정된 영역의 평균 Gray 값을 계산합니다.
+        /// </summary>
+        public static double GetGrayAverage(System.Windows.Media.Imaging.BitmapSource screenImage, int x, int y, int width, int height)
+        {
+            if (screenImage == null) return 0;
+
+            using (Mat source = OpenCvSharp.WpfExtensions.BitmapSourceConverter.ToMat(screenImage))
+            using (Mat gray = new Mat())
+            {
+                // 1. 그레이스케일 변환
+                Cv2.CvtColor(source, gray, ColorConversionCodes.BGR2GRAY);
+
+                // 2. ROI 설정 (이미지 범위를 벗어나지 않도록 보정)
+                int safeX = Math.Max(0, Math.Min(x, gray.Cols - 1));
+                int safeY = Math.Max(0, Math.Min(y, gray.Rows - 1));
+                int safeW = Math.Max(1, Math.Min(width, gray.Cols - safeX));
+                int safeH = Math.Max(1, Math.Min(height, gray.Rows - safeY));
+
+                using (Mat roi = new Mat(gray, new OpenCvSharp.Rect(safeX, safeY, safeW, safeH)))
+                {
+                    // 3. 평균값 반환
+                    return roi.Mean().Val0;
+                }
+            }
+        }
     }
 }

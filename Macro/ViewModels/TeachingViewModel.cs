@@ -21,9 +21,10 @@ namespace Macro.ViewModels
 
         private SequenceItem? _selectedSequence;
         private string _currentRecipeName = "No Recipe Selected";
+        private ObservableCollection<string> _sequenceNames = new ObservableCollection<string>();
 
         // ComboBox Lists
-        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match" };
+        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change" };
         public List<string> ActionTypes { get; } = new List<string> { "Mouse Click", "Key Press" };
 
         #endregion
@@ -35,6 +36,8 @@ namespace Macro.ViewModels
         public ViewModelActivator Activator { get; } = new ViewModelActivator();
 
         public ObservableCollection<SequenceItem> Sequences { get; }
+
+        public ObservableCollection<string> SequenceNames => _sequenceNames;
 
         public string CurrentRecipeName
         {
@@ -92,7 +95,7 @@ namespace Macro.ViewModels
 
         public ReactiveCommand<ImageMatchCondition, Unit> SelectImageCommand { get; }
         public ReactiveCommand<ImageMatchCondition, Unit> CaptureImageCommand { get; }
-        public ReactiveCommand<ImageMatchCondition, Unit> PickRegionCommand { get; }
+        public ReactiveCommand<object, Unit> PickRegionCommand { get; }
 
         #endregion
 
@@ -102,6 +105,17 @@ namespace Macro.ViewModels
         {
             HostScreen = screen;
             Sequences = new ObservableCollection<SequenceItem>();
+
+            // 스텝 이름 목록 자동 갱신
+            var sequencesChanged = Observable.FromEventPattern<System.Collections.Specialized.NotifyCollectionChangedEventHandler, System.Collections.Specialized.NotifyCollectionChangedEventArgs>(
+                h => Sequences.CollectionChanged += h,
+                h => Sequences.CollectionChanged -= h);
+
+            sequencesChanged
+                .Subscribe(_ => UpdateSequenceNames());
+
+            // 초기 목록 생성
+            UpdateSequenceNames();
 
             // Initialize Commands
             AddSequenceCommand = ReactiveCommand.Create(AddSequence);
@@ -154,20 +168,30 @@ namespace Macro.ViewModels
                 }
             });
 
-            // 영역 선택 커맨드
-            PickRegionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(async condition =>
+            // 영역 선택 커맨드 (범용)
+            PickRegionCommand = ReactiveCommand.CreateFromTask<object>(async obj =>
             {
-                if (condition == null) return;
+                if (obj == null) return;
 
                 var rect = await GetRegionInteraction.Handle(Unit.Default);
                 if (rect.HasValue)
                 {
                     var r = rect.Value;
-                    condition.UseRegion = true;
-                    condition.RegionX = (int)r.X;
-                    condition.RegionY = (int)r.Y;
-                    condition.RegionW = (int)r.Width;
-                    condition.RegionH = (int)r.Height;
+                    if (obj is ImageMatchCondition imgMatch)
+                    {
+                        imgMatch.UseRegion = true;
+                        imgMatch.RegionX = (int)r.X;
+                        imgMatch.RegionY = (int)r.Y;
+                        imgMatch.RegionW = (int)r.Width;
+                        imgMatch.RegionH = (int)r.Height;
+                    }
+                    else if (obj is GrayChangeCondition grayChange)
+                    {
+                        grayChange.X = (int)r.X;
+                        grayChange.Y = (int)r.Y;
+                        grayChange.Width = (int)r.Width;
+                        grayChange.Height = (int)r.Height;
+                    }
                 }
             });
 
@@ -188,13 +212,34 @@ namespace Macro.ViewModels
 
         #region Logic Methods
 
+        private void UpdateSequenceNames()
+        {
+            _sequenceNames.Clear();
+            _sequenceNames.Add("(Next Step)");
+            _sequenceNames.Add("(Ignore & Continue)");
+            _sequenceNames.Add("(Stop Execution)");
+            
+            foreach (var item in Sequences)
+            {
+                if (!string.IsNullOrEmpty(item.Name))
+                {
+                    _sequenceNames.Add(item.Name);
+                }
+            }
+        }
+
         private async Task RunSingleStepAsync(SequenceItem item)
         {
             if (item == null) return;
             try
             {
-                var singleList = new List<SequenceItem> { item };
-                await MacroEngineService.Instance.RunAsync(singleList);
+                System.Windows.Point? foundPoint = null;
+                if (item.PreCondition != null)
+                {
+                    bool check = await item.PreCondition.CheckAsync();
+                    if (check) foundPoint = item.PreCondition.FoundPoint;
+                }
+                await item.Action.ExecuteAsync(foundPoint);
             }
             catch (Exception ex)
             {
@@ -283,6 +328,7 @@ namespace Macro.ViewModels
             {
                 DelayCondition => "Delay",
                 ImageMatchCondition => "Image Match",
+                GrayChangeCondition => "Gray Change",
                 _ => "None"
             };
         }
@@ -305,6 +351,7 @@ namespace Macro.ViewModels
             {
                 "Delay" => new DelayCondition { DelayTimeMs = 1000 },
                 "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
+                "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
@@ -318,6 +365,7 @@ namespace Macro.ViewModels
             {
                 "Delay" => new DelayCondition { DelayTimeMs = 500 },
                 "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
+                "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));

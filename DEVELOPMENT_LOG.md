@@ -56,11 +56,33 @@
     - 증상: `ImagePath` 바인딩 시 파일이 사용 중이어서 덮어쓰기/삭제 불가.
     - 해결: `OnLoad` 캐시 옵션을 사용하는 `UriToBitmapConverter`를 개발하여 메모리 로드 후 핸들 즉시 해제.
 
+### 3.10. 실행 엔진 고도화 및 편의 기능 (2025-12-30)
+- **Retry & Loop**: 각 시퀀스 스텝별로 반복 실행(RepeatCount) 및 조건 실패 시 재시도(RetryCount) 기능을 엔진과 UI에 통합.
+- **Global Hotkey**: `RegisterHotKey` Win32 API를 활용한 전역 단축키 서비스 구현. F5(시작), F6(중지) 지원.
+- **Multi-Monitor & DPI Aware**: 
+    - `SystemParameters.VirtualScreen` 기반의 전체 영역 캡처 및 좌표 픽업 지원.
+    - DPI 스케일링 배율을 계산하여 WPF DIP 좌표와 Win32 물리 픽셀 좌표 간의 변환 로직 적용.
+
+### 3.11. 좌표 연동 및 인간적인 동작 구현 (2025-12-30)
+- **Condition-Action 좌표 연동**:
+    - `IMacroCondition`에 `FoundPoint` 속성 추가 (이미지 매칭 성공 시 중심 좌표 저장).
+    - `MouseClickAction`에 `UseConditionAddress` 옵션 추가. 활성화 시 이전 단계에서 찾은 좌표로 자동 이동 및 클릭.
+    - 실행 엔진 파이프라인에서 `PreCondition`의 결과 좌표를 `Action`으로 안전하게 전달하도록 개선.
+- **Human-like Mouse Movement**:
+    - **Smooth Move**: 직선 순간 이동 대신 Sine Easing 함수를 활용하여 가속/감속이 포함된 부드러운 마우스 경로 구현.
+    - **Randomization**: 목표 좌표에 미세 오차(±1px) 부여, 클릭 유지 시간 및 더블 클릭 간격에 랜덤 지연 적용.
+    - **Reliability**: 클릭 전후의 짧은 대기 시간을 랜덤하게 부여하여 시스템 및 대상 프로그램의 반응 안정성 확보.
+
+### 3.12. 조건부 분기 (Conditional Branching) 구현 (2025-12-30)
+- **Logic**: `SequenceItem`에 `SuccessJumpName` 및 `FailJumpName` 속성을 추가하여 실행 흐름 제어 지원.
+- **Engine**: `MacroEngineService`의 실행 루프를 `foreach`에서 `while` 인덱스 제어 방식으로 변경하여 특정 스텝으로의 '점프' 및 '루프' 구현 가능.
+- **UI**: `TeachingView`에 성공/실패 시 점프 대상을 선택할 수 있는 ComboBox 추가. `TeachingViewModel`에서 현재 레시피의 스텝 이름 목록을 실시간 동기화하여 제공.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
-- **경고**: NU1701 (ReactiveUI 버전 호환성) 및 일부 미사용 변수 경고 존재하나 실행에 지장 없음.
+- **경고**: NU1701 (ReactiveUI 버전 호환성) 및 일부 nullability 경고 존재하나 실행 안정성 확보됨.
 
 ## 5. 향후 계획
-- **실행 엔진 고도화**: 조건 실패 시 재시도(Retry) 및 루프 기능 추가.
-- **Global Hotkey**: 프로그램이 최소화된 상태에서도 실행/중지가 가능한 전역 단축키 구현.
-- **멀티 모니터 대응**: `SystemParameters`를 활용한 다중 모니터 좌표 보정.
+- **조건부 분기(Branching)**: 특정 조건 만족 시 다른 스텝으로 점프하는 로직 추가.
+- **스크립트 지원**: 복잡한 계산이나 로직 처리를 위한 간단한 C# 스크립트 실행 기능.
+- **UI 개선**: 다크 모드 지원 및 로그 시각화 강화.

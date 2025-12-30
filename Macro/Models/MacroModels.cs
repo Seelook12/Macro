@@ -13,9 +13,12 @@ namespace Macro.Models
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
     [JsonDerivedType(typeof(DelayCondition), typeDiscriminator: nameof(DelayCondition))]
     [JsonDerivedType(typeof(ImageMatchCondition), typeDiscriminator: nameof(ImageMatchCondition))]
+    [JsonDerivedType(typeof(GrayChangeCondition), typeDiscriminator: nameof(GrayChangeCondition))]
     public interface IMacroCondition
     {
         Task<bool> CheckAsync();
+        System.Windows.Point? FoundPoint { get; }
+        string FailJumpName { get; set; }
     }
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
@@ -23,7 +26,8 @@ namespace Macro.Models
     [JsonDerivedType(typeof(KeyPressAction), typeDiscriminator: nameof(KeyPressAction))]
     public interface IMacroAction
     {
-        Task ExecuteAsync();
+        Task ExecuteAsync(System.Windows.Point? conditionPoint = null);
+        string FailJumpName { get; set; }
     }
 
     #endregion
@@ -33,11 +37,20 @@ namespace Macro.Models
     public class DelayCondition : ReactiveObject, IMacroCondition
     {
         private int _delayTimeMs;
+        private string _failJumpName = string.Empty;
+
+        public System.Windows.Point? FoundPoint => null;
 
         public int DelayTimeMs
         {
             get => _delayTimeMs;
             set => this.RaiseAndSetIfChanged(ref _delayTimeMs, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
         }
 
         public async Task<bool> CheckAsync()
@@ -51,6 +64,7 @@ namespace Macro.Models
     {
         private string _imagePath = string.Empty;
         private double _threshold = 0.9;
+        private string _failJumpName = string.Empty;
         
         // ROI Properties
         private bool _useRegion;
@@ -71,11 +85,18 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _threshold, value);
         }
 
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
         public bool UseRegion
         {
             get => _useRegion;
             set => this.RaiseAndSetIfChanged(ref _useRegion, value);
         }
+// ... (Region properties 생략, 유지됨)
 
         public int RegionX
         {
@@ -101,8 +122,18 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _regionH, value);
         }
 
+        private System.Windows.Point? _foundPoint;
+
+        [JsonIgnore]
+        public System.Windows.Point? FoundPoint
+        {
+            get => _foundPoint;
+            private set => this.RaiseAndSetIfChanged(ref _foundPoint, value);
+        }
+
         public async Task<bool> CheckAsync()
         {
+            _foundPoint = null;
             return await Task.Run(() =>
             {
                 try
@@ -129,10 +160,106 @@ namespace Macro.Models
                     // 2. 이미지 서치
                     var result = ImageSearchService.FindImage(capture, ImagePath, Threshold, roi);
 
+                    if (result.HasValue)
+                    {
+                        _foundPoint = result.Value;
+                        return true;
+                    }
+
                     // 3. 결과 반환
-                    return result.HasValue;
+                    return false;
                 }
                 catch (Exception)
+                {
+                    return false;
+                }
+            });
+        }
+    }
+
+    public class GrayChangeCondition : ReactiveObject, IMacroCondition
+    {
+        private int _x;
+        private int _y;
+        private int _width = 50;
+        private int _height = 50;
+        private double _threshold = 10.0;
+        private int _delayMs = 100;
+        private string _failJumpName = string.Empty;
+
+        public int X
+        {
+            get => _x;
+            set => this.RaiseAndSetIfChanged(ref _x, value);
+        }
+
+        public int Y
+        {
+            get => _y;
+            set => this.RaiseAndSetIfChanged(ref _y, value);
+        }
+
+        public int Width
+        {
+            get => _width;
+            set => this.RaiseAndSetIfChanged(ref _width, value);
+        }
+
+        public int Height
+        {
+            get => _height;
+            set => this.RaiseAndSetIfChanged(ref _height, value);
+        }
+
+        public double Threshold
+        {
+            get => _threshold;
+            set => this.RaiseAndSetIfChanged(ref _threshold, value);
+        }
+
+        public int DelayMs
+        {
+            get => _delayMs;
+            set => this.RaiseAndSetIfChanged(ref _delayMs, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        [JsonIgnore]
+        public double? ReferenceValue { get; set; }
+
+        public System.Windows.Point? FoundPoint => null;
+
+        public async Task<bool> CheckAsync()
+        {
+            if (DelayMs > 0)
+            {
+                await Task.Delay(DelayMs);
+            }
+
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    var capture = System.Windows.Application.Current.Dispatcher.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
+                    if (capture == null) return false;
+
+                    double currentValue = ImageSearchService.GetGrayAverage(capture, X, Y, Width, Height);
+
+
+                    if (ReferenceValue == null)
+                    {
+                        return true;
+                    }
+
+                    double diff = Math.Abs(currentValue - ReferenceValue.Value);
+                    return diff >= Threshold;
+                }
+                catch
                 {
                     return false;
                 }
@@ -149,6 +276,8 @@ namespace Macro.Models
         private int _x;
         private int _y;
         private string _clickType = "Left"; // Left, Right, Double
+        private bool _useConditionAddress;
+        private string _failJumpName = string.Empty;
 
         public int X
         {
@@ -168,12 +297,33 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _clickType, value);
         }
 
-        public async Task ExecuteAsync()
+        public bool UseConditionAddress
+        {
+            get => _useConditionAddress;
+            set => this.RaiseAndSetIfChanged(ref _useConditionAddress, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
         {
             // 백그라운드 스레드에서 UI 차단 없이 실행
             await Task.Run(() =>
             {
-                InputHelper.MoveAndClick(X, Y, ClickType);
+                int finalX = X;
+                int finalY = Y;
+
+                if (UseConditionAddress && conditionPoint.HasValue)
+                {
+                    finalX = (int)conditionPoint.Value.X;
+                    finalY = (int)conditionPoint.Value.Y;
+                }
+
+                InputHelper.MoveAndClick(finalX, finalY, ClickType);
             });
         }
     }
@@ -181,6 +331,7 @@ namespace Macro.Models
     public class KeyPressAction : ReactiveObject, IMacroAction
     {
         private string _keyCode = string.Empty;
+        private string _failJumpName = string.Empty;
 
         public string KeyCode
         {
@@ -188,7 +339,13 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _keyCode, value);
         }
 
-        public async Task ExecuteAsync()
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
         {
             await Task.Run(() =>
             {
@@ -233,6 +390,11 @@ namespace Macro.Models
         private IMacroAction _action;
         private IMacroCondition? _postCondition;
 
+        private int _retryCount = 0;
+        private int _retryDelayMs = 500;
+        private int _repeatCount = 1;
+        private string _successJumpName = string.Empty;
+
         public SequenceItem(IMacroAction action)
         {
             _action = action ?? throw new ArgumentNullException(nameof(action));
@@ -240,13 +402,17 @@ namespace Macro.Models
 
         // JSON Deserialization을 위한 기본 생성자 (필요 시)
         [JsonConstructor]
-        public SequenceItem(string name, bool isEnabled, IMacroCondition? preCondition, IMacroAction action, IMacroCondition? postCondition)
+        public SequenceItem(string name, bool isEnabled, IMacroCondition? preCondition, IMacroAction action, IMacroCondition? postCondition, int retryCount = 0, int retryDelayMs = 500, int repeatCount = 1, string successJumpName = "")
         {
              _name = name;
              _isEnabled = isEnabled;
              _preCondition = preCondition;
              _action = action ?? throw new ArgumentNullException(nameof(action));
              _postCondition = postCondition;
+             _retryCount = retryCount;
+             _retryDelayMs = retryDelayMs;
+             _repeatCount = repeatCount;
+             _successJumpName = successJumpName;
         }
 
         public string Name
@@ -277,6 +443,30 @@ namespace Macro.Models
         {
             get => _postCondition;
             set => this.RaiseAndSetIfChanged(ref _postCondition, value);
+        }
+
+        public int RetryCount
+        {
+            get => _retryCount;
+            set => this.RaiseAndSetIfChanged(ref _retryCount, value);
+        }
+
+        public int RetryDelayMs
+        {
+            get => _retryDelayMs;
+            set => this.RaiseAndSetIfChanged(ref _retryDelayMs, value);
+        }
+
+        public int RepeatCount
+        {
+            get => _repeatCount;
+            set => this.RaiseAndSetIfChanged(ref _repeatCount, value);
+        }
+
+        public string SuccessJumpName
+        {
+            get => _successJumpName;
+            set => this.RaiseAndSetIfChanged(ref _successJumpName, value);
         }
     }
 

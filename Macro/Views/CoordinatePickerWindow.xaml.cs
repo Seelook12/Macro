@@ -12,6 +12,13 @@ namespace Macro.Views
         public CoordinatePickerWindow(BitmapSource captureImage)
         {
             InitializeComponent();
+
+            // 가상 스크린 전체 영역으로 창 설정 (다중 모니터 대응)
+            this.Left = SystemParameters.VirtualScreenLeft;
+            this.Top = SystemParameters.VirtualScreenTop;
+            this.Width = SystemParameters.VirtualScreenWidth;
+            this.Height = SystemParameters.VirtualScreenHeight;
+
             CaptureImage.Source = captureImage;
             
             this.KeyDown += CoordinatePickerWindow_KeyDown;

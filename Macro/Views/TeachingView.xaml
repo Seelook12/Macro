@@ -21,16 +21,23 @@
         
         <!-- 1. DelayCondition -->
         <DataTemplate DataType="{x:Type models:DelayCondition}">
-            <Grid Margin="5">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Wait Time:" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBox Grid.Column="1" Text="{Binding DelayTimeMs, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="2" Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
-            </Grid>
+            <StackPanel Margin="5">
+                <Grid Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Wait Time:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBox Grid.Column="1" Text="{Binding DelayTimeMs, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                </Grid>
+                <DockPanel Margin="0,5,0,0">
+                    <TextBlock Text="Fail Jump:" VerticalAlignment="Center" Width="70" Foreground="Gray"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding FailJumpName}"/>
+                </DockPanel>
+            </StackPanel>
         </DataTemplate>
 
         <!-- 2. ImageMatchCondition -->
@@ -63,7 +70,7 @@
                 </DockPanel>
 
                 <!-- ROI Settings -->
-                <GroupBox Header="Search Region (ROI)" Margin="0,5,0,0">
+                <GroupBox Header="Search Region (ROI)" Margin="0,5,0,10">
                     <StackPanel>
                         <CheckBox Content="Use ROI (Region of Interest)" IsChecked="{Binding UseRegion}" Margin="0,0,0,5"/>
                         <Grid IsEnabled="{Binding UseRegion}">
@@ -90,6 +97,69 @@
                         </Grid>
                     </StackPanel>
                 </GroupBox>
+
+                <DockPanel>
+                    <TextBlock Text="Fail Jump:" VerticalAlignment="Center" Width="70" Foreground="#C62828" FontWeight="Bold"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding FailJumpName}"/>
+                </DockPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 3. GrayChangeCondition -->
+        <DataTemplate DataType="{x:Type models:GrayChangeCondition}">
+            <StackPanel Margin="5">
+                <Grid Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Orientation="Vertical">
+                        <UniformGrid Columns="2" Margin="0,0,0,5">
+                            <DockPanel Margin="0,0,5,0">
+                                <TextBlock Text="X:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                <TextBox Text="{Binding X, UpdateSourceTrigger=PropertyChanged}"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <TextBlock Text="Y:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                <TextBox Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}"/>
+                            </DockPanel>
+                        </UniformGrid>
+                        <UniformGrid Columns="2">
+                            <DockPanel Margin="0,0,5,0">
+                                <TextBlock Text="W:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                <TextBox Text="{Binding Width, UpdateSourceTrigger=PropertyChanged}"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <TextBlock Text="H:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                <TextBox Text="{Binding Height, UpdateSourceTrigger=PropertyChanged}"/>
+                            </DockPanel>
+                        </UniformGrid>
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Content="Pick Region" 
+                            Margin="10,0,0,0" Padding="10,0"
+                            Command="{Binding DataContext.PickRegionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding .}"/>
+                </Grid>
+
+                <UniformGrid Columns="2" Margin="0,0,0,10">
+                    <DockPanel Margin="0,0,5,0">
+                        <TextBlock Text="Threshold:" VerticalAlignment="Center" Width="70"/>
+                        <TextBox Text="{Binding Threshold, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <DockPanel>
+                        <TextBlock Text="Delay:" VerticalAlignment="Center" Width="45"/>
+                        <TextBox Text="{Binding DelayMs, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="ms" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                    </DockPanel>
+                </UniformGrid>
+                <DockPanel>
+                    <TextBlock Text="Fail Jump:" VerticalAlignment="Center" Width="70" Foreground="#C62828" FontWeight="Bold"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding FailJumpName}"/>
+                </DockPanel>
             </StackPanel>
         </DataTemplate>
 
@@ -120,7 +190,8 @@
                             ToolTip="화면을 캡처하여 클릭한 위치의 좌표를 가져옵니다."/>
                 </Grid>
                 
-                <DockPanel LastChildFill="True">
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                    <CheckBox Content="Use Found Coord" IsChecked="{Binding UseConditionAddress}" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip="Pre-Condition에서 찾은 이미지의 중앙 좌표를 사용합니다."/>
                     <TextBlock Text="Type:" VerticalAlignment="Center" Width="40"/>
                     <ComboBox SelectedValue="{Binding ClickType}" SelectedValuePath="Content">
                         <ComboBoxItem Content="Left"/>
@@ -128,15 +199,26 @@
                         <ComboBoxItem Content="Double"/>
                     </ComboBox>
                 </DockPanel>
+
+                <DockPanel>
+                    <TextBlock Text="Fail Jump:" VerticalAlignment="Center" Width="70" Foreground="Gray"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding FailJumpName}"/>
+                </DockPanel>
             </StackPanel>
         </DataTemplate>
 
         <!-- 2. KeyPressAction -->
         <DataTemplate DataType="{x:Type models:KeyPressAction}">
             <StackPanel Margin="5">
-                <DockPanel LastChildFill="True">
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
                     <TextBlock Text="Key Code:" VerticalAlignment="Center" Width="70"/>
                     <TextBox Text="{Binding KeyCode, UpdateSourceTrigger=PropertyChanged}"/>
+                </DockPanel>
+                <DockPanel>
+                    <TextBlock Text="Fail Jump:" VerticalAlignment="Center" Width="70" Foreground="Gray"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding FailJumpName}"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
@@ -218,10 +300,26 @@
                     </Style>
                 </StackPanel.Style>
                 <TextBlock Text="Step Details" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
-                <DockPanel LastChildFill="True" Margin="0,0,0,20">
-                    <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                    <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,10,0" Width="50"/>
                     <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
                 </DockPanel>
+
+                <UniformGrid Columns="3" Margin="0,0,0,20">
+                    <DockPanel Margin="0,0,10,0">
+                        <TextBlock Text="Repeat:" VerticalAlignment="Center" Margin="0,0,5,0" Width="50"/>
+                        <TextBox Text="{Binding RepeatCount, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,0,10,0">
+                        <TextBlock Text="Retry:" VerticalAlignment="Center" Margin="0,0,5,0" Width="40"/>
+                        <TextBox Text="{Binding RetryCount, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <DockPanel>
+                        <TextBlock Text="Delay:" VerticalAlignment="Center" Margin="0,0,5,0" Width="40"/>
+                        <TextBox Text="{Binding RetryDelayMs, UpdateSourceTrigger=PropertyChanged}" ToolTip="Retry delay in milliseconds"/>
+                        <TextBlock Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                    </DockPanel>
+                </UniformGrid>
             </StackPanel>
 
             <!-- ScrollViewer for 3-Step Edit -->
@@ -269,8 +367,8 @@
                         </StackPanel>
                     </GroupBox>
 
-                    <!-- Step 3: Post-Condition -->
-                    <GroupBox Header="3. Complete Check (Post-Condition)" Margin="0,0,0,15" Padding="10">
+                    <!-- Step 3: Post-Condition & Flow Control -->
+                    <GroupBox Header="3. Complete Check &amp; Flow Control" Margin="0,0,0,15" Padding="10">
                         <StackPanel>
                             <DockPanel LastChildFill="True" Margin="0,0,0,10">
                                 <TextBlock Text="Condition Type:" VerticalAlignment="Center" Width="100"/>
@@ -280,7 +378,27 @@
 
                             <!-- Dynamic Content -->
                             <ContentControl Content="{Binding SelectedSequence.PostCondition}"
-                                            BorderBrush="LightGray" BorderThickness="1" Padding="5"/>
+                                            BorderBrush="LightGray" BorderThickness="1" Padding="5" Margin="0,0,0,10"/>
+
+                            <Separator Margin="0,5,0,10"/>
+
+                            <Grid DataContext="{Binding SelectedSequence}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <TextBlock Text="[SUCCESS] Flow Control (Next Step)" Foreground="#2E7D32" FontWeight="Bold" Margin="0,0,0,5"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding SuccessJumpName}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Visibility="Collapsed">
+                                    <!-- SequenceItem 레벨의 FailJumpName은 이제 사용하지 않으므로 숨김 -->
+                                    <TextBlock Text="If FAIL (Jump/Stop)" Foreground="#C62828" FontWeight="Bold" Margin="0,0,0,5"/>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </GroupBox>
                     

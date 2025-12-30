@@ -1,4 +1,5 @@
 using Macro.Models;
+using Macro.Utils;
 using ReactiveUI;
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,16 @@ namespace Macro.Services
 {
     public class MacroEngineService : ReactiveObject
     {
+        // Custom Exception to carry jump info
+        private class ComponentFailureException : Exception
+        {
+            public string FailJumpName { get; }
+            public ComponentFailureException(string message, string failJumpName) : base(message)
+            {
+                FailJumpName = failJumpName;
+            }
+        }
+
         // Singleton Implementation
         private static readonly Lazy<MacroEngineService> _instance =
             new Lazy<MacroEngineService>(() => new MacroEngineService());
@@ -54,51 +65,182 @@ namespace Macro.Services
                 // Run on background thread to keep UI responsive
                 await Task.Run(async () =>
                 {
-                    int stepIndex = 1;
-                    foreach (var item in sequences)
+                    var sequenceList = new List<SequenceItem>(sequences);
+                    int currentIndex = 0;
+
+                    while (currentIndex < sequenceList.Count)
                     {
                         token.ThrowIfCancellationRequested();
+
+                        var item = sequenceList[currentIndex];
+                        int stepIndex = currentIndex + 1;
 
                         if (!item.IsEnabled)
                         {
                             AddLog($"[Step {stepIndex}] '{item.Name}' 스킵 (비활성화됨)");
-                            stepIndex++;
+                            currentIndex++;
                             continue;
                         }
 
                         AddLog($"[Step {stepIndex}] '{item.Name}' 처리 시작");
 
-                        // 1. PreCondition
-                        if (item.PreCondition != null)
+                        bool allRepeatsSuccess = true;
+                        string? jumpTargetName = null;
+
+                        for (int repeat = 1; repeat <= item.RepeatCount; repeat++)
                         {
-                            AddLog($"  - 조건 확인 중: {GetTypeName(item.PreCondition)}");
-                            bool check = await item.PreCondition.CheckAsync();
-                            if (!check)
+                            token.ThrowIfCancellationRequested();
+                            
+                            if (item.RepeatCount > 1)
                             {
-                                throw new Exception($"PreCondition 실패: {item.Name}");
+                                AddLog($"  - 반복 실행 중 ({repeat}/{item.RepeatCount})");
+                            }
+
+                            int retryAttempt = 0;
+                            bool stepSuccess = false;
+                            System.Windows.Point? foundPoint = null;
+
+                            while (!stepSuccess)
+                            {
+                                try
+                                {
+                                    // 1. PreCondition
+                                    if (item.PreCondition != null)
+                                    {
+                                        AddLog($"    - 조건 확인 중: {GetTypeName(item.PreCondition)} (시도 {retryAttempt + 1})");
+                                        bool check = await item.PreCondition.CheckAsync();
+                                        if (!check)
+                                        {
+                                            throw new ComponentFailureException($"PreCondition 실패: {item.Name}", item.PreCondition.FailJumpName);
+                                        }
+                                        foundPoint = item.PreCondition.FoundPoint;
+                                    }
+
+                                    // 2. Action 실행 전 데이터 주입 (GrayChangeCondition 등)
+                                    if (item.PostCondition is GrayChangeCondition gcc)
+                                    {
+                                        var preCapture = System.Windows.Application.Current.Dispatcher.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
+                                        if (preCapture != null)
+                                        {
+                                            gcc.ReferenceValue = ImageSearchService.GetGrayAverage(preCapture, gcc.X, gcc.Y, gcc.Width, gcc.Height);
+                                            AddLog($"    - [Gray] 기준값 측정 완료: {gcc.ReferenceValue:F2}");
+                                        }
+                                    }
+
+                                    // 2. Action 실행
+                                    token.ThrowIfCancellationRequested();
+                                    AddLog($"    - 동작 실행 중: {GetTypeName(item.Action)}");
+                                    try
+                                    {
+                                        await item.Action.ExecuteAsync(foundPoint);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        throw new ComponentFailureException($"Action 실행 실패: {ex.Message}", item.Action.FailJumpName);
+                                    }
+
+                                    // 3. PostCondition
+                                    if (item.PostCondition != null)
+                                    {
+                                        token.ThrowIfCancellationRequested();
+                                        AddLog($"    - 결과 확인 중: {GetTypeName(item.PostCondition)}");
+                                        bool check = await item.PostCondition.CheckAsync();
+                                        if (!check)
+                                        {
+                                            throw new ComponentFailureException($"PostCondition 실패: {item.Name}", item.PostCondition.FailJumpName);
+                                        }
+                                    }
+
+                                    stepSuccess = true;
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    throw;
+                                }
+                                catch (ComponentFailureException cfex)
+                                {
+                                    if (retryAttempt < item.RetryCount)
+                                    {
+                                        retryAttempt++;
+                                        AddLog($"    !!! 실패: {cfex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
+                                        await Task.Delay(item.RetryDelayMs, token);
+                                    }
+                                    else
+                                    {
+                                        AddLog($"    !!! [Step {stepIndex}] 최종 실패: {cfex.Message}");
+                                        allRepeatsSuccess = false;
+                                        jumpTargetName = cfex.FailJumpName;
+                                        break; 
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    if (retryAttempt < item.RetryCount)
+                                    {
+                                        retryAttempt++;
+                                        AddLog($"    !!! 예상치 못한 오류: {ex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
+                                        await Task.Delay(item.RetryDelayMs, token);
+                                    }
+                                    else
+                                    {
+                                        AddLog($"    !!! [Step {stepIndex}] 중단: {ex.Message}");
+                                        throw;
+                                    }
+                                }
+                            }
+
+                            if (!allRepeatsSuccess) break;
+                        }
+
+                        // 결과에 따른 흐름 제어
+                        if (allRepeatsSuccess)
+                        {
+                            jumpTargetName = item.SuccessJumpName;
+                            if (string.IsNullOrEmpty(jumpTargetName) || jumpTargetName == "(Next Step)")
+                            {
+                                AddLog($"    -> 성공: 다음 스텝으로 진행");
+                                currentIndex++;
+                                jumpTargetName = null;
+                            }
+                            else if (jumpTargetName == "(Stop Execution)")
+                            {
+                                AddLog($"    -> 성공했으나 중지 설정됨: 실행을 중단합니다.");
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            // jumpTargetName은 이미 ComponentFailureException에서 가져옴
+                            if (string.IsNullOrEmpty(jumpTargetName) || jumpTargetName == "(Stop Execution)")
+                            {
+                                throw new Exception($"[Step {stepIndex}] 최종 실패로 인해 실행을 중단합니다.");
+                            }
+                            else if (jumpTargetName == "(Next Step)" || jumpTargetName == "(Ignore & Continue)")
+                            {
+                                AddLog($"    -> 실패했으나 무시하고 다음 스텝으로 진행합니다.");
+                                currentIndex++;
+                                jumpTargetName = null;
                             }
                         }
 
-                        // 2. Action
-                        token.ThrowIfCancellationRequested();
-                        AddLog($"  - 동작 실행 중: {GetTypeName(item.Action)}");
-                        await item.Action.ExecuteAsync();
-
-                        // 3. PostCondition
-                        if (item.PostCondition != null)
+                        // 이름 기반 점프 처리 (위에서 currentIndex가 변경되지 않은 경우)
+                        if (!string.IsNullOrEmpty(jumpTargetName))
                         {
-                            token.ThrowIfCancellationRequested();
-                            AddLog($"  - 결과 확인 중: {GetTypeName(item.PostCondition)}");
-                            bool check = await item.PostCondition.CheckAsync();
-                            if (!check)
+                            int targetIndex = sequenceList.FindIndex(s => s.Name == jumpTargetName);
+                            if (targetIndex != -1)
                             {
-                                throw new Exception($"PostCondition 실패: {item.Name}");
+                                AddLog($"    -> 점프: '{jumpTargetName}'(으)로 이동 (Index: {targetIndex + 1})");
+                                currentIndex = targetIndex;
+                            }
+                            else
+                            {
+                                AddLog($"    !!! 경고: 점프 대상 '{jumpTargetName}'을(를) 찾을 수 없습니다. 다음 스텝으로 진행합니다.");
+                                currentIndex++;
                             }
                         }
 
                         // Short delay to prevent tight loops
                         await Task.Delay(100, token);
-                        stepIndex++;
                     }
                 }, token);
 

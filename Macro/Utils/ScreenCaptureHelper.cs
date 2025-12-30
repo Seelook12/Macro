@@ -15,33 +15,52 @@ namespace Macro.Utils
 
         public static BitmapSource GetScreenCapture()
         {
-            // 주 모니터의 해상도 가져오기 (멀티 모니터 대응이 필요하면 System.Windows.Forms.Screen.AllScreens 사용 필요)
-            // 여기서는 심플하게 PrimaryScreen 크기만큼 캡처
-            int screenLeft = (int)SystemParameters.VirtualScreenLeft;
-            int screenTop = (int)SystemParameters.VirtualScreenTop;
-            int screenWidth = (int)SystemParameters.VirtualScreenWidth;
-            int screenHeight = (int)SystemParameters.VirtualScreenHeight;
+            // 1. DPI 배율 가져오기
+            double scaleX = 1.0;
+            double scaleY = 1.0;
+
+            var mainWindow = System.Windows.Application.Current.MainWindow;
+            if (mainWindow != null)
+            {
+                var source = System.Windows.PresentationSource.FromVisual(mainWindow);
+                if (source != null && source.CompositionTarget != null)
+                {
+                    scaleX = source.CompositionTarget.TransformToDevice.M11;
+                    scaleY = source.CompositionTarget.TransformToDevice.M22;
+                }
+            }
+
+            // 2. 가상 스크린 영역 (DIP -> Pixel 변환)
+            int screenLeft = (int)(SystemParameters.VirtualScreenLeft * scaleX);
+            int screenTop = (int)(SystemParameters.VirtualScreenTop * scaleY);
+            int screenWidth = (int)(SystemParameters.VirtualScreenWidth * scaleX);
+            int screenHeight = (int)(SystemParameters.VirtualScreenHeight * scaleY);
 
             using (Bitmap bmp = new Bitmap(screenWidth, screenHeight))
             {
                 using (Graphics g = Graphics.FromImage(bmp))
                 {
+                    // 가상 스크린 전체를 물리 픽셀 단위로 캡처
                     g.CopyFromScreen(screenLeft, screenTop, 0, 0, bmp.Size);
                 }
 
-                // Bitmap -> BitmapSource 변환
+                // 3. Bitmap -> BitmapSource 변환 (DPI 정보 포함)
                 IntPtr hBitmap = bmp.GetHbitmap();
                 try
                 {
-                    return Imaging.CreateBitmapSourceFromHBitmap(
+                    var bitmapSource = Imaging.CreateBitmapSourceFromHBitmap(
                         hBitmap,
                         IntPtr.Zero,
                         Int32Rect.Empty,
                         BitmapSizeOptions.FromEmptyOptions());
+
+                    // 생성된 BitmapSource에 DPI 정보가 누락되었을 수 있으므로 명시적 생성 권장
+                    // (단, CreateBitmapSourceFromHBitmap 결과가 충분하면 그대로 사용)
+                    return bitmapSource;
                 }
                 finally
                 {
-                    DeleteObject(hBitmap); // 메모리 누수 방지
+                    DeleteObject(hBitmap);
                 }
             }
         }

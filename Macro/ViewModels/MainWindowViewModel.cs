@@ -50,5 +50,32 @@ namespace Macro.ViewModels
             // 앱 시작 시 대시보드 화면으로 이동
             Router.Navigate.Execute(DashboardVM);
         }
+
+        #region Hotkey Settings
+
+        public void SetupHotkeys()
+        {
+            var hotkey = Macro.Services.HotkeyService.Instance;
+
+            // F5: Start (VK_F5 = 0x74)
+            hotkey.RegisterHotkey(9001, 0, 0x74);
+
+            // F6: Stop (VK_F6 = 0x75)
+            hotkey.RegisterHotkey(9002, 0, 0x75);
+
+            hotkey.HotkeyPressed += id =>
+            {
+                if (id == 9001) // F5
+                {
+                    DashboardVM.RunCommand.Execute().Subscribe();
+                }
+                else if (id == 9002) // F6
+                {
+                    DashboardVM.StopCommand.Execute().Subscribe();
+                }
+            };
+        }
+
+        #endregion
     }
 }

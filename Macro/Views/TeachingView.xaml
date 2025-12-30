@@ -167,7 +167,28 @@
         <!-- [DataTemplates] Action Models -->
         <!-- ==================================================================== -->
 
-        <!-- 1. MouseClickAction -->
+        <!-- 1. IdleAction -->
+        <DataTemplate DataType="{x:Type models:IdleAction}">
+            <StackPanel Margin="5">
+                <Grid Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Idle Time:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBox Grid.Column="1" Text="{Binding DelayTimeMs, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                </Grid>
+                <DockPanel Margin="0,5,0,0">
+                    <TextBlock Text="Fail Jump:" VerticalAlignment="Center" Width="70" Foreground="Gray"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding FailJumpName}"/>
+                </DockPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 2. MouseClickAction -->
         <DataTemplate DataType="{x:Type models:MouseClickAction}">
             <StackPanel Margin="5">
                 <Grid Margin="0,0,0,5">
@@ -208,7 +229,7 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- 2. KeyPressAction -->
+        <!-- 3. KeyPressAction -->
         <DataTemplate DataType="{x:Type models:KeyPressAction}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">

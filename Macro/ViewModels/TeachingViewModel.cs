@@ -25,7 +25,7 @@ namespace Macro.ViewModels
 
         // ComboBox Lists
         public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change" };
-        public List<string> ActionTypes { get; } = new List<string> { "Mouse Click", "Key Press" };
+        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press" };
 
         #endregion
 
@@ -337,9 +337,10 @@ namespace Macro.ViewModels
         {
             return action switch
             {
+                IdleAction => "Idle",
                 MouseClickAction => "Mouse Click",
                 KeyPressAction => "Key Press",
-                _ => "Mouse Click" // Default
+                _ => "Idle" // Default
             };
         }
 
@@ -375,7 +376,11 @@ namespace Macro.ViewModels
         {
             if (SelectedSequence == null) return;
 
-            if (type == "Mouse Click" && !(SelectedSequence.Action is MouseClickAction))
+            if (type == "Idle" && !(SelectedSequence.Action is IdleAction))
+            {
+                SelectedSequence.Action = new IdleAction();
+            }
+            else if (type == "Mouse Click" && !(SelectedSequence.Action is MouseClickAction))
             {
                 SelectedSequence.Action = new MouseClickAction();
             }
@@ -388,7 +393,7 @@ namespace Macro.ViewModels
 
         private void AddSequence()
         {
-            var newAction = new MouseClickAction { X = 100, Y = 100, ClickType = "Left" };
+            var newAction = new IdleAction();
             var newItem = new SequenceItem(newAction)
             {
                 Name = $"Step {Sequences.Count + 1}",

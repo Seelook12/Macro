@@ -135,7 +135,8 @@ namespace Macro.ViewModels
                         mouseAction.Y = (int)point.Value.Y;
                     }
                 }
-            }, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item?.Action is MouseClickAction));
+            }, this.WhenAnyValue(x => x.SelectedSequence, x => x.SelectedSequence!.Action, 
+                (item, action) => item != null && action is MouseClickAction));
 
             // 이미지 선택 커맨드
             SelectImageCommand = ReactiveCommand.Create<ImageMatchCondition>(condition =>

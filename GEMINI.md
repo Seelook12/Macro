@@ -1,15 +1,20 @@
 ## Gemini Added Memories
-- The user is Korean and prefers responses in Korean.
-- I should explain code changes in my response instead of adding inline comments.
-- If I find something strange or incorrect in the code, I must explain it to the user before making any changes.
-- The user is a C# developer.
-- The user prefers code to be structured in the MVVM pattern.
-- Do not perform general refactoring on multiple files based on a broad instruction. Only refactor the specific file the user is currently asking about, and only after confirming the refactoring task itself.
-- Project Code Conventions to strictly adhere to:
-1. **Indent**: 4 spaces.
-2. **Braces**: Allman style (open brace on new line) for classes, methods, and control blocks.
-3. **Naming**: PascalCase for Classes, Methods, Properties; camelCase for local variables and parameters; Interfaces start with 'I'.
-4. **Architecture**: MVVM pattern using ReactiveUI (`ViewModelBase` inherits `ReactiveObject`).
-5. **Structure**: Use `#region` ... `#endregion` to organize code blocks (Constructor, Properties, Methods).
-6. **Comments**: Korean comments are permitted and encouraged for explanations.
-- MANDATORY: Always respond in Korean. Explain code changes and logic in Korean.
+- 사용자는 한국인이며 한국어 응답을 선호함.
+- 코드 변경 사항은 주석보다 응답 텍스트로 설명하는 것을 선호함.
+- 사용자는 C# 개발자이며 MVVM 패턴(특히 ReactiveUI)을 선호함.
+- **WPF 프로젝트 규칙**:
+  1. 인덴트: 4 spaces.
+  2. 중괄호: Allman style.
+  3. **네임스페이스 충돌 주의**: `UseWindowsForms`가 활성화되어 있으므로 아래 클래스 사용 시 반드시 명시적 네임스페이스 또는 별칭(alias)을 사용할 것.
+     - `Application` -> `System.Windows.Application`
+     - `MessageBox` -> `System.Windows.MessageBox` (WPF용 사용 시)
+     - `UserControl` -> `using UserControl = System.Windows.Controls.UserControl;`
+     - `Point` -> `using Point = System.Windows.Point;`
+     - `KeyEventArgs`, `MouseEventArgs` -> `System.Windows.Input` 소속임을 명시.
+  4. **이미지 처리**: `Image` 컨트롤 바인딩 시 파일 잠금 방지를 위해 `UriToBitmapConverter`를 반드시 사용할 것.
+  5. **OpenCV**: `Mat` 객체 사용 시 반드시 `using` 문으로 메모리 해제 처리할 것.
+  6. **View 패턴**: `ReactiveUserControl`보다 `UserControl` + `IViewFor<T>` + `WhenActivated` 명시적 바인딩 패턴이 이 프로젝트에서 더 안정적임.
+- **이미지 매칭**: `OpenCvSharp4`를 사용하며, 템플릿 이미지는 레시피 폴더에 타임스탬프와 함께 복사하여 상대적으로 관리함.
+--- 
+- `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
+- `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

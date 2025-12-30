@@ -2,14 +2,14 @@ using System;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ReactiveUI;
+using Macro.Utils;
+using Macro.Services;
+using System.Windows.Input;
 
 namespace Macro.Models
 {
     #region Interfaces
 
-    /// <summary>
-    /// 매크로 실행 전/후 조건을 정의하는 인터페이스
-    /// </summary>
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
     [JsonDerivedType(typeof(DelayCondition), typeDiscriminator: nameof(DelayCondition))]
     [JsonDerivedType(typeof(ImageMatchCondition), typeDiscriminator: nameof(ImageMatchCondition))]
@@ -18,9 +18,6 @@ namespace Macro.Models
         Task<bool> CheckAsync();
     }
 
-    /// <summary>
-    /// 매크로의 실제 동작을 정의하는 인터페이스
-    /// </summary>
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
     [JsonDerivedType(typeof(MouseClickAction), typeDiscriminator: nameof(MouseClickAction))]
     [JsonDerivedType(typeof(KeyPressAction), typeDiscriminator: nameof(KeyPressAction))]
@@ -54,6 +51,13 @@ namespace Macro.Models
     {
         private string _imagePath = string.Empty;
         private double _threshold = 0.9;
+        
+        // ROI Properties
+        private bool _useRegion;
+        private int _regionX;
+        private int _regionY;
+        private int _regionW;
+        private int _regionH;
 
         public string ImagePath
         {
@@ -67,10 +71,72 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _threshold, value);
         }
 
-        public Task<bool> CheckAsync()
+        public bool UseRegion
         {
-            // TODO: 실제 이미지 매칭 로직 구현 필요
-            return Task.FromResult(true);
+            get => _useRegion;
+            set => this.RaiseAndSetIfChanged(ref _useRegion, value);
+        }
+
+        public int RegionX
+        {
+            get => _regionX;
+            set => this.RaiseAndSetIfChanged(ref _regionX, value);
+        }
+
+        public int RegionY
+        {
+            get => _regionY;
+            set => this.RaiseAndSetIfChanged(ref _regionY, value);
+        }
+
+        public int RegionW
+        {
+            get => _regionW;
+            set => this.RaiseAndSetIfChanged(ref _regionW, value);
+        }
+
+        public int RegionH
+        {
+            get => _regionH;
+            set => this.RaiseAndSetIfChanged(ref _regionH, value);
+        }
+
+        public async Task<bool> CheckAsync()
+        {
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    // 1. 현재 화면 캡처
+                    var capture = System.Windows.Application.Current.Dispatcher.Invoke(() => 
+                    {
+                        var bmp = ScreenCaptureHelper.GetScreenCapture();
+                        bmp?.Freeze(); // 다른 스레드에서 사용 가능하게 얼림
+                        return bmp;
+                    });
+
+                    if (capture == null) return false;
+
+                    if (string.IsNullOrEmpty(ImagePath)) return false;
+
+                    // ROI 영역 확인
+                    System.Windows.Rect? roi = null;
+                    if (UseRegion && RegionW > 0 && RegionH > 0)
+                    {
+                        roi = new System.Windows.Rect(RegionX, RegionY, RegionW, RegionH);
+                    }
+
+                    // 2. 이미지 서치
+                    var result = ImageSearchService.FindImage(capture, ImagePath, Threshold, roi);
+
+                    // 3. 결과 반환
+                    return result.HasValue;
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            });
         }
     }
 
@@ -102,10 +168,13 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _clickType, value);
         }
 
-        public Task ExecuteAsync()
+        public async Task ExecuteAsync()
         {
-            // TODO: 실제 마우스 클릭 로직 구현 필요
-            return Task.CompletedTask;
+            // 백그라운드 스레드에서 UI 차단 없이 실행
+            await Task.Run(() =>
+            {
+                InputHelper.MoveAndClick(X, Y, ClickType);
+            });
         }
     }
 
@@ -119,10 +188,36 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _keyCode, value);
         }
 
-        public Task ExecuteAsync()
+        public async Task ExecuteAsync()
         {
-            // TODO: 실제 키보드 입력 로직 구현 필요
-            return Task.CompletedTask;
+            await Task.Run(() =>
+            {
+                if (string.IsNullOrEmpty(KeyCode)) return;
+
+                try
+                {
+                    // 문자열(예: "Enter", "A", "F1")을 WPF Key Enum으로 변환
+                    if (Enum.TryParse(typeof(Key), KeyCode, true, out var result))
+                    {
+                        Key key = (Key)result;
+                        // Key를 Windows Virtual Key Code로 변환
+                        int vKey = KeyInterop.VirtualKeyFromKey(key);
+                        
+                        if (vKey > 0)
+                        {
+                            InputHelper.PressKey((byte)vKey);
+                        }
+                    }
+                    else
+                    {
+                        // 파싱 실패 시 처리 (로그 등)
+                    }
+                }
+                catch
+                {
+                    // 변환 실패 무시
+                }
+            });
         }
     }
 

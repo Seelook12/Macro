@@ -9,6 +9,7 @@ using System.Reactive.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Macro.Models;
+using Macro.Services;
 using Macro.Utils;
 using ReactiveUI;
 
@@ -77,6 +78,21 @@ namespace Macro.ViewModels
         public ReactiveCommand<Unit, Unit> AddSequenceCommand { get; }
         public ReactiveCommand<Unit, Unit> RemoveSequenceCommand { get; }
         public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+        public ReactiveCommand<SequenceItem, Unit> RunSingleStepCommand { get; }
+        
+        // Interaction: Input(Unit) -> Output(Point?)
+        public Interaction<Unit, System.Windows.Point?> GetCoordinateInteraction { get; } = new Interaction<Unit, System.Windows.Point?>();
+        public ReactiveCommand<Unit, Unit> PickCoordinateCommand { get; }
+
+        // Interaction: Input(Unit) -> Output(Rect?)
+        public Interaction<Unit, System.Windows.Rect?> GetRegionInteraction { get; } = new Interaction<Unit, System.Windows.Rect?>();
+        
+        // Interaction: Input(Unit) -> Output(string? TempFilePath)
+        public Interaction<Unit, string?> CaptureImageInteraction { get; } = new Interaction<Unit, string?>();
+
+        public ReactiveCommand<ImageMatchCondition, Unit> SelectImageCommand { get; }
+        public ReactiveCommand<ImageMatchCondition, Unit> CaptureImageCommand { get; }
+        public ReactiveCommand<ImageMatchCondition, Unit> PickRegionCommand { get; }
 
         #endregion
 
@@ -91,8 +107,70 @@ namespace Macro.ViewModels
             AddSequenceCommand = ReactiveCommand.Create(AddSequence);
             RemoveSequenceCommand = ReactiveCommand.Create(RemoveSequence, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item != null));
             SaveCommand = ReactiveCommand.CreateFromTask(SaveSequencesAsync);
+            RunSingleStepCommand = ReactiveCommand.CreateFromTask<SequenceItem>(RunSingleStepAsync);
+            
+            // 좌표 픽업 커맨드
+            PickCoordinateCommand = ReactiveCommand.CreateFromTask(async () =>
+            {
+                if (SelectedSequence?.Action is MouseClickAction mouseAction)
+                {
+                    var point = await GetCoordinateInteraction.Handle(Unit.Default);
+                    if (point.HasValue)
+                    {
+                        mouseAction.X = (int)point.Value.X;
+                        mouseAction.Y = (int)point.Value.Y;
+                    }
+                }
+            }, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item?.Action is MouseClickAction));
 
-            // Activation Logic (Load Data)
+            // 이미지 선택 커맨드
+            SelectImageCommand = ReactiveCommand.Create<ImageMatchCondition>(condition =>
+            {
+                if (condition == null) return;
+
+                var dlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "Image Files|*.png;*.jpg;*.bmp",
+                    Title = "Select Template Image"
+                };
+
+                if (dlg.ShowDialog() == true)
+                {
+                    SaveImageToRecipe(condition, dlg.FileName);
+                }
+            });
+
+            // 이미지 캡처 커맨드
+            CaptureImageCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(async condition =>
+            {
+                if (condition == null) return;
+
+                var tempPath = await CaptureImageInteraction.Handle(Unit.Default);
+
+                if (!string.IsNullOrEmpty(tempPath) && File.Exists(tempPath))
+                {
+                    SaveImageToRecipe(condition, tempPath);
+                    try { File.Delete(tempPath); } catch { }
+                }
+            });
+
+            // 영역 선택 커맨드
+            PickRegionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(async condition =>
+            {
+                if (condition == null) return;
+
+                var rect = await GetRegionInteraction.Handle(Unit.Default);
+                if (rect.HasValue)
+                {
+                    var r = rect.Value;
+                    condition.UseRegion = true;
+                    condition.RegionX = (int)r.X;
+                    condition.RegionY = (int)r.Y;
+                    condition.RegionW = (int)r.Width;
+                    condition.RegionH = (int)r.Height;
+                }
+            });
+
             this.WhenActivated(disposables =>
             {
                 // 1. 화면 진입 시 초기 로드
@@ -100,21 +178,29 @@ namespace Macro.ViewModels
                 
                 // 2. 화면이 활성화된 상태에서 레시피가 변경되면 다시 로드 (Reactive)
                 RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
-                    .Skip(1) // 첫 번째 값은 위 LoadData()에서 처리했거나 중복일 수 있으므로 건너뜀 (선택 사항이나 안전하게)
+                    .Skip(1)
                     .Subscribe(_ => LoadData())
                     .DisposeWith(disposables);
-
-                // 필요한 경우 해제 로직 추가
-                Disposable.Create(() => 
-                { 
-                    // 비활성화 시 필요한 작업
-                }).DisposeWith(disposables);
             });
         }
 
         #endregion
 
         #region Logic Methods
+
+        private async Task RunSingleStepAsync(SequenceItem item)
+        {
+            if (item == null) return;
+            try
+            {
+                var singleList = new List<SequenceItem> { item };
+                await MacroEngineService.Instance.RunAsync(singleList);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Single run failed: {ex.Message}");
+            }
+        }
 
         private void LoadData()
         {
@@ -135,7 +221,7 @@ namespace Macro.ViewModels
                 if (File.Exists(currentRecipe.FilePath))
                 {
                     var json = File.ReadAllText(currentRecipe.FilePath);
-                    if (!string.IsNullOrWhiteSpace(json) && json != "{}") // 빈 파일 체크
+                    if (!string.IsNullOrWhiteSpace(json) && json != "{}")
                     {
                         var loadedData = JsonSerializer.Deserialize<List<SequenceItem>>(json, GetJsonOptions());
                         if (loadedData != null)
@@ -151,7 +237,6 @@ namespace Macro.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to load recipe: {ex.Message}");
-                // TODO: Show Error Message
             }
         }
 
@@ -160,7 +245,6 @@ namespace Macro.ViewModels
             var currentRecipe = RecipeManager.Instance.CurrentRecipe;
             if (currentRecipe == null || string.IsNullOrEmpty(currentRecipe.FilePath))
             {
-                // TODO: Show Warning "No recipe selected"
                 return;
             }
 
@@ -168,12 +252,10 @@ namespace Macro.ViewModels
             {
                 var json = JsonSerializer.Serialize(Sequences, GetJsonOptions());
                 await File.WriteAllTextAsync(currentRecipe.FilePath, json);
-                // TODO: Show Success Message (Optional)
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to save recipe: {ex.Message}");
-                // TODO: Show Error Message
             }
         }
 
@@ -183,7 +265,6 @@ namespace Macro.ViewModels
             {
                 WriteIndented = true,
                 PropertyNameCaseInsensitive = true
-                // Note: Polymorphism is handled by attributes on the Interface definitions in MacroModels.cs
             };
         }
 
@@ -268,6 +349,39 @@ namespace Macro.ViewModels
 
             Sequences.Add(newItem);
             SelectedSequence = newItem;
+        }
+
+        private void SaveImageToRecipe(ImageMatchCondition condition, string sourcePath)
+        {
+            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+            
+            if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
+            {
+                var recipeDir = Path.GetDirectoryName(currentRecipe.FilePath);
+                if (recipeDir != null)
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(sourcePath);
+                    var ext = Path.GetExtension(sourcePath);
+                    var newFileName = $"{fileName}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
+                    
+                    var destPath = Path.Combine(recipeDir, newFileName);
+                    
+                    try
+                    {
+                        File.Copy(sourcePath, destPath, true);
+                        condition.ImagePath = destPath; 
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Windows.MessageBox.Show($"이미지 저장 실패: {ex.Message}");
+                        condition.ImagePath = sourcePath; 
+                    }
+                }
+            }
+            else
+            {
+                condition.ImagePath = sourcePath;
+            }
         }
 
         private void RemoveSequence()

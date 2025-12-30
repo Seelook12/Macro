@@ -2,6 +2,7 @@ using System.Windows;
 using ReactiveUI;
 using Macro.ViewModels;
 using Macro.Views;
+using Application = System.Windows.Application;
 
 namespace Macro
 {

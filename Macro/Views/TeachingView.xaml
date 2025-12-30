@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:vm="clr-namespace:Macro.ViewModels"
              xmlns:models="clr-namespace:Macro.Models"
+             xmlns:utils="clr-namespace:Macro.Utils"
              mc:Ignorable="d" 
              d:DesignHeight="800" d:DesignWidth="1000"
              d:DataContext="{d:DesignInstance Type=vm:TeachingViewModel, IsDesignTimeCreatable=False}">
@@ -12,6 +13,7 @@
     <UserControl.Resources>
         <!-- Converter (Safety) -->
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <utils:UriToBitmapConverter x:Key="UriToBitmapConverter"/>
 
         <!-- ==================================================================== -->
         <!-- [DataTemplates] Condition Models -->
@@ -36,15 +38,58 @@
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
                     <TextBlock Text="Image:" VerticalAlignment="Center" Width="60"/>
-                    <Button Content="..." DockPanel.Dock="Right" Width="30" Margin="5,0,0,0"/>
-                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                        <Button Content="Pick" Width="40" Margin="5,0,0,0"
+                                Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding .}"
+                                ToolTip="Select existing image file"/>
+                        <Button Content="Capture" Width="60" Margin="5,0,0,0"
+                                Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding .}"
+                                ToolTip="Snip from screen"/>
+                    </StackPanel>
+                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True" ToolTip="{Binding ImagePath}"/>
                 </DockPanel>
+
+                <!-- Image Preview -->
+                <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,5" Height="100" Background="#F8F8F8">
+                    <Image Source="{Binding ImagePath, Converter={StaticResource UriToBitmapConverter}}" Stretch="Uniform" ToolTip="Image Preview"/>
+                </Border>
                 
-                <DockPanel LastChildFill="True">
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
                     <TextBlock Text="Threshold:" VerticalAlignment="Center" Width="60"/>
                     <TextBlock Text="{Binding Threshold, StringFormat=P0}" DockPanel.Dock="Right" Width="40" TextAlignment="Right" VerticalAlignment="Center"/>
                     <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center"/>
                 </DockPanel>
+
+                <!-- ROI Settings -->
+                <GroupBox Header="Search Region (ROI)" Margin="0,5,0,0">
+                    <StackPanel>
+                        <CheckBox Content="Use ROI (Region of Interest)" IsChecked="{Binding UseRegion}" Margin="0,0,0,5"/>
+                        <Grid IsEnabled="{Binding UseRegion}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Orientation="Vertical">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                    <TextBlock Text="X: " Width="20" FontWeight="Bold"/><TextBlock Text="{Binding RegionX}"/>
+                                    <TextBlock Text=" W: " Width="25" FontWeight="Bold" Margin="10,0,0,0"/><TextBlock Text="{Binding RegionW}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Y: " Width="20" FontWeight="Bold"/><TextBlock Text="{Binding RegionY}"/>
+                                    <TextBlock Text=" H: " Width="25" FontWeight="Bold" Margin="10,0,0,0"/><TextBlock Text="{Binding RegionH}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            
+                            <Button Grid.Column="1" Content="Pick Region" 
+                                    Padding="10,5" VerticalAlignment="Center"
+                                    Command="{Binding DataContext.PickRegionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding .}"/>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
             </StackPanel>
         </DataTemplate>
 
@@ -61,12 +106,18 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="X:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <TextBox Grid.Column="1" Text="{Binding X, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
                     
                     <TextBlock Grid.Column="2" Text="Y:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
+
+                    <Button Grid.Column="4" Content="현재위치" 
+                            Padding="5,0"
+                            Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            ToolTip="화면을 캡처하여 클릭한 위치의 좌표를 가져옵니다."/>
                 </Grid>
                 
                 <DockPanel LastChildFill="True">
@@ -114,13 +165,28 @@
             <ListBox Grid.Row="1" 
                      ItemsSource="{Binding Sequences}" 
                      SelectedItem="{Binding SelectedSequence}"
-                     Margin="5">
+                     Margin="5"
+                     HorizontalContentAlignment="Stretch">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"/>
+                            
+                            <Button Grid.Column="2" Content="▶" 
+                                    Width="25" Height="25"
+                                    Padding="0"
+                                    ToolTip="Run this step only"
+                                    Command="{Binding DataContext.RunSingleStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding .}"
+                                    Background="Transparent" BorderThickness="0" Foreground="#2D8A3E" FontWeight="Bold"/>
+                        </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

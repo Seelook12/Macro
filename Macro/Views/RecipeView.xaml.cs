@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Macro.ViewModels;
 using ReactiveUI;
+using UserControl = System.Windows.Controls.UserControl;
 
 namespace Macro.Views
 {
@@ -42,7 +43,7 @@ namespace Macro.Views
                 // [New] 변경 확인 팝업 핸들러
                 ViewModel!.ConfirmChange.RegisterHandler(ctx =>
                 {
-                    var result = MessageBox.Show(ctx.Input, "레시피 변경", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    var result = System.Windows.MessageBox.Show(ctx.Input, "레시피 변경", MessageBoxButton.YesNo, MessageBoxImage.Question);
                     ctx.SetOutput(result == MessageBoxResult.Yes);
                 }).DisposeWith(disposables);
             });

@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Disposables;
-using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -74,6 +74,63 @@ namespace Macro.ViewModels
             set => SetPostCondition(value);
         }
 
+        // Jump Target Selection Helpers (Name <-> Id Mapping)
+        public string SuccessJumpTarget
+        {
+            get => GetJumpNameFromId(SelectedSequence?.SuccessJumpId, SelectedSequence?.SuccessJumpName);
+            set
+            {
+                if (SelectedSequence != null)
+                {
+                    SelectedSequence.SuccessJumpName = value;
+                    SelectedSequence.SuccessJumpId = GetJumpIdFromName(value);
+                    this.RaisePropertyChanged(nameof(SuccessJumpTarget));
+                }
+            }
+        }
+
+        public string PreFailJumpTarget
+        {
+            get => GetJumpNameFromId(SelectedSequence?.PreCondition?.FailJumpId, SelectedSequence?.PreCondition?.FailJumpName);
+            set
+            {
+                if (SelectedSequence?.PreCondition != null)
+                {
+                    SelectedSequence.PreCondition.FailJumpName = value;
+                    SelectedSequence.PreCondition.FailJumpId = GetJumpIdFromName(value);
+                    this.RaisePropertyChanged(nameof(PreFailJumpTarget));
+                }
+            }
+        }
+
+        public string ActionFailJumpTarget
+        {
+            get => GetJumpNameFromId(SelectedSequence?.Action?.FailJumpId, SelectedSequence?.Action?.FailJumpName);
+            set
+            {
+                if (SelectedSequence?.Action != null)
+                {
+                    SelectedSequence.Action.FailJumpName = value;
+                    SelectedSequence.Action.FailJumpId = GetJumpIdFromName(value);
+                    this.RaisePropertyChanged(nameof(ActionFailJumpTarget));
+                }
+            }
+        }
+
+        public string PostFailJumpTarget
+        {
+            get => GetJumpNameFromId(SelectedSequence?.PostCondition?.FailJumpId, SelectedSequence?.PostCondition?.FailJumpName);
+            set
+            {
+                if (SelectedSequence?.PostCondition != null)
+                {
+                    SelectedSequence.PostCondition.FailJumpName = value;
+                    SelectedSequence.PostCondition.FailJumpId = GetJumpIdFromName(value);
+                    this.RaisePropertyChanged(nameof(PostFailJumpTarget));
+                }
+            }
+        }
+
         #endregion
 
         #region Commands
@@ -95,6 +152,7 @@ namespace Macro.ViewModels
 
         public ReactiveCommand<ImageMatchCondition, Unit> SelectImageCommand { get; }
         public ReactiveCommand<ImageMatchCondition, Unit> CaptureImageCommand { get; }
+        public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; }
         public ReactiveCommand<object, Unit> PickRegionCommand { get; }
 
         #endregion
@@ -169,6 +227,53 @@ namespace Macro.ViewModels
                 }
             });
 
+            // 이미지 테스트 커맨드
+            TestImageConditionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(async condition =>
+            {
+                if (condition == null) return;
+                
+                try 
+                {
+                    condition.TestResult = "Searching...";
+                    
+                    // 1. 화면 캡처
+                    var capture = ScreenCaptureHelper.GetScreenCapture();
+                    if (capture == null) 
+                    {
+                        condition.TestResult = "Capture Failed";
+                        return;
+                    }
+
+                    // 2. ROI 설정
+                    System.Windows.Rect? roi = null;
+                    if (condition.UseRegion && condition.RegionW > 0 && condition.RegionH > 0)
+                    {
+                        roi = new System.Windows.Rect(condition.RegionX, condition.RegionY, condition.RegionW, condition.RegionH);
+                    }
+
+                    // 3. 이미지 검색 실행
+                    var result = await Task.Run(() => ImageSearchService.FindImageDetailed(capture, condition.ImagePath, condition.Threshold, roi));
+
+                    // 4. 결과 업데이트
+                    condition.TestScore = result.Score;
+                    if (result.Point.HasValue)
+                    {
+                        condition.TestResult = $"Success ({result.Point.Value.X:F0}, {result.Point.Value.Y:F0})";
+                        MacroEngineService.Instance.AddLog($"[Test] 이미지 매칭 성공: 점수 {result.Score:P1}, 위치 ({result.Point.Value.X:F0}, {result.Point.Value.Y:F0})");
+                    }
+                    else
+                    {
+                        condition.TestResult = "Failed (Low Score)";
+                        MacroEngineService.Instance.AddLog($"[Test] 이미지 매칭 실패: 최고 점수 {result.Score:P1} (임계값 {condition.Threshold:P1})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    condition.TestResult = "Error";
+                    MacroEngineService.Instance.AddLog($"[Test] 이미지 매칭 오류: {ex.Message}");
+                }
+            });
+
             // 영역 선택 커맨드 (범용)
             PickRegionCommand = ReactiveCommand.CreateFromTask<object>(async obj =>
             {
@@ -198,14 +303,60 @@ namespace Macro.ViewModels
 
             this.WhenActivated(disposables =>
             {
+                // 점프 이름 변경 시 ID 자동 동기화 관찰
+                var d1 = this.WhenAnyValue(x => x.SelectedSequence)
+                    .WhereNotNull()
+                    .Subscribe(seq =>
+                    {
+                        // SuccessJumpName 감시
+                        var d2 = seq.WhenAnyValue(x => x.SuccessJumpName)
+                            .Subscribe(name => seq.SuccessJumpId = GetJumpIdFromName(name));
+                        disposables.Add(d2);
+
+                        // PreCondition FailJumpName 감시
+                        var d3 = seq.WhenAnyValue(x => x.PreCondition)
+                            .WhereNotNull()
+                            .Subscribe(cond =>
+                            {
+                                var d4 = cond.WhenAnyValue(x => x.FailJumpName)
+                                    .Subscribe(name => cond.FailJumpId = GetJumpIdFromName(name));
+                                disposables.Add(d4);
+                            });
+                        disposables.Add(d3);
+
+                        // Action FailJumpName 감시
+                        var d5 = seq.WhenAnyValue(x => x.Action)
+                            .WhereNotNull()
+                            .Subscribe(act =>
+                            {
+                                var d6 = act.WhenAnyValue(x => x.FailJumpName)
+                                    .Subscribe(name => act.FailJumpId = GetJumpIdFromName(name));
+                                disposables.Add(d6);
+                            });
+                        disposables.Add(d5);
+
+                        // PostCondition FailJumpName 감시
+                        var d7 = seq.WhenAnyValue(x => x.PostCondition)
+                            .WhereNotNull()
+                            .Subscribe(cond =>
+                            {
+                                var d8 = cond.WhenAnyValue(x => x.FailJumpName)
+                                    .Subscribe(name => cond.FailJumpId = GetJumpIdFromName(name));
+                                disposables.Add(d8);
+                            });
+                        disposables.Add(d7);
+
+                    });
+                disposables.Add(d1);
+
                 // 1. 화면 진입 시 초기 로드
                 LoadData();
                 
                 // 2. 화면이 활성화된 상태에서 레시피가 변경되면 다시 로드 (Reactive)
-                RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
+                var dRecipe = RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
                     .Skip(1)
-                    .Subscribe(_ => LoadData())
-                    .DisposeWith(disposables);
+                    .Subscribe(_ => LoadData());
+                disposables.Add(dRecipe);
             });
         }
 
@@ -321,6 +472,23 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
             this.RaisePropertyChanged(nameof(SelectedActionType));
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
+            this.RaisePropertyChanged(nameof(SuccessJumpTarget));
+        }
+
+        private string GetJumpNameFromId(string? id, string? fallbackName)
+        {
+            if (string.IsNullOrEmpty(id)) return fallbackName ?? "(Next Step)";
+            if (id == "(Next Step)" || id == "(Ignore & Continue)" || id == "(Stop Execution)") return id;
+
+            var target = Sequences.FirstOrDefault(s => s.Id.ToString() == id);
+            return target?.Name ?? fallbackName ?? "(Next Step)";
+        }
+
+        private string GetJumpIdFromName(string name)
+        {
+            if (name == "(Next Step)" || name == "(Ignore & Continue)" || name == "(Stop Execution)") return name;
+            var target = Sequences.FirstOrDefault(s => s.Name == name);
+            return target?.Id.ToString() ?? string.Empty;
         }
 
         private string GetConditionType(IMacroCondition? condition)
@@ -414,6 +582,9 @@ namespace Macro.ViewModels
                 var recipeDir = Path.GetDirectoryName(currentRecipe.FilePath);
                 if (recipeDir != null)
                 {
+                    // 기존 경로 보관 (삭제용)
+                    string oldPath = condition.ImagePath;
+
                     var fileName = Path.GetFileNameWithoutExtension(sourcePath);
                     var ext = Path.GetExtension(sourcePath);
                     var newFileName = $"{fileName}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
@@ -423,7 +594,21 @@ namespace Macro.ViewModels
                     try
                     {
                         File.Copy(sourcePath, destPath, true);
+                        
+                        // 캐시 비우기 (새 이미지가 반영되도록)
+                        ImageSearchService.ClearCache();
+                        
                         condition.ImagePath = destPath; 
+
+                        // 기존 파일이 다른 곳에서 안 쓰이면 삭제
+                        if (!string.IsNullOrEmpty(oldPath) && File.Exists(oldPath))
+                        {
+                            bool isUsedElsewhere = IsImagePathUsed(oldPath, condition);
+                            if (!isUsedElsewhere)
+                            {
+                                try { File.Delete(oldPath); } catch { }
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -438,12 +623,49 @@ namespace Macro.ViewModels
             }
         }
 
+        private bool IsImagePathUsed(string path, object currentCondition)
+        {
+            foreach (var seq in Sequences)
+            {
+                if (IsPathMatch(seq.PreCondition, path, currentCondition)) return true;
+                if (IsPathMatch(seq.PostCondition, path, currentCondition)) return true;
+            }
+            return false;
+        }
+
+        private bool IsPathMatch(IMacroCondition? condition, string path, object currentCondition)
+        {
+            if (condition == null || condition == currentCondition) return false;
+            if (condition is ImageMatchCondition imgMatch)
+            {
+                return imgMatch.ImagePath == path;
+            }
+            return false;
+        }
+
         private void RemoveSequence()
         {
             if (SelectedSequence != null)
             {
-                Sequences.Remove(SelectedSequence);
+                var itemToRemove = SelectedSequence;
+                Sequences.Remove(itemToRemove);
+                
+                // 삭제된 스텝의 이미지가 더 이상 안 쓰이면 파일 삭제 처리
+                if (itemToRemove.PreCondition is ImageMatchCondition preImg) 
+                    DeleteImageIfOrphaned(preImg.ImagePath);
+                if (itemToRemove.PostCondition is ImageMatchCondition postImg)
+                    DeleteImageIfOrphaned(postImg.ImagePath);
+
                 SelectedSequence = null;
+            }
+        }
+
+        private void DeleteImageIfOrphaned(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+            if (!IsImagePathUsed(path, null!))
+            {
+                try { File.Delete(path); } catch { }
             }
         }
 

@@ -69,6 +69,30 @@
                     <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center"/>
                 </DockPanel>
 
+                <!-- Test Section -->
+                <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Match Score: " FontWeight="Bold"/>
+                                <TextBlock Text="{Binding TestScore, StringFormat=P1}" Foreground="#1565C0" FontWeight="Bold"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Result: " FontWeight="Bold"/>
+                                <TextBlock Text="{Binding TestResult}" Foreground="#0D47A1"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="🔍 Test Match" 
+                                Padding="10,5" Background="#2196F3" Foreground="White" FontWeight="Bold"
+                                Command="{Binding DataContext.TestImageConditionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding .}"/>
+                    </Grid>
+                </Border>
+
                 <!-- ROI Settings -->
                 <GroupBox Header="Search Region (ROI)" Margin="0,5,0,10">
                     <StackPanel>
@@ -80,18 +104,30 @@
                             </Grid.ColumnDefinitions>
                             
                             <StackPanel Orientation="Vertical">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                    <TextBlock Text="X: " Width="20" FontWeight="Bold"/><TextBlock Text="{Binding RegionX}"/>
-                                    <TextBlock Text=" W: " Width="25" FontWeight="Bold" Margin="10,0,0,0"/><TextBlock Text="{Binding RegionW}"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Y: " Width="20" FontWeight="Bold"/><TextBlock Text="{Binding RegionY}"/>
-                                    <TextBlock Text=" H: " Width="25" FontWeight="Bold" Margin="10,0,0,0"/><TextBlock Text="{Binding RegionH}"/>
-                                </StackPanel>
+                                <UniformGrid Columns="2" Margin="0,0,0,5">
+                                    <DockPanel Margin="0,0,5,0">
+                                        <TextBlock Text="X:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                        <TextBox Text="{Binding RegionX, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                    <DockPanel>
+                                        <TextBlock Text="Y:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                        <TextBox Text="{Binding RegionY, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                </UniformGrid>
+                                <UniformGrid Columns="2">
+                                    <DockPanel Margin="0,0,5,0">
+                                        <TextBlock Text="W:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                        <TextBox Text="{Binding RegionW, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                    <DockPanel>
+                                        <TextBlock Text="H:" VerticalAlignment="Center" Width="20" FontWeight="Bold"/>
+                                        <TextBox Text="{Binding RegionH, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                </UniformGrid>
                             </StackPanel>
                             
                             <Button Grid.Column="1" Content="Pick Region" 
-                                    Padding="10,5" VerticalAlignment="Center"
+                                    Margin="10,0,0,0" Padding="10,0"
                                     Command="{Binding DataContext.PickRegionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding .}"/>
                         </Grid>
@@ -412,7 +448,7 @@
                                 <StackPanel Grid.Column="0" Margin="0,0,10,0">
                                     <TextBlock Text="[SUCCESS] Flow Control (Next Step)" Foreground="#2E7D32" FontWeight="Bold" Margin="0,0,0,5"/>
                                     <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                              SelectedItem="{Binding SuccessJumpName}"/>
+                                              SelectedItem="{Binding DataContext.SuccessJumpTarget, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Visibility="Collapsed">

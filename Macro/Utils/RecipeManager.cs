@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Macro.Services;
 
 namespace Macro.Utils
 {
@@ -26,6 +27,9 @@ namespace Macro.Utils
                 this.RaiseAndSetIfChanged(ref _currentRecipe, value);
                 if (value != null)
                 {
+                    // 레시피 변경 시 이미지 캐시 비우기 (새 레시피 이미지 로드 준비)
+                    ImageSearchService.ClearCache();
+
                     // 레시피가 변경될 때마다 최근 사용 기록 저장 (자동실행 옵션은 기존꺼 유지)
                     var settings = SettingsManager.LoadSettings();
                     settings.LastRecipeName = value.FileName;

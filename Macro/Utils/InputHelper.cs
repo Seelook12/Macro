@@ -44,6 +44,97 @@ namespace Macro.Utils
         private const uint KEYEVENTF_KEYUP = 0x0002;
         private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
 
+        // Window Show Constants
+        public const int SW_SHOWNORMAL = 1;
+        public const int SW_SHOWMINIMIZED = 2;
+        public const int SW_SHOWMAXIMIZED = 3;
+        public const int SW_RESTORE = 9;
+
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsZoomed(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetShellWindow();
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        public static System.Collections.Generic.List<string> GetOpenWindows()
+        {
+            IntPtr shellWindow = GetShellWindow();
+            var windows = new System.Collections.Generic.List<string>();
+
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (hWnd == shellWindow) return true;
+                if (!IsWindowVisible(hWnd)) return true;
+
+                int length = GetWindowTextLength(hWnd);
+                if (length == 0) return true;
+
+                System.Text.StringBuilder builder = new System.Text.StringBuilder(length);
+                GetWindowText(hWnd, builder, length + 1);
+
+                string title = builder.ToString();
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    windows.Add(title);
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            return windows;
+        }
+
+        public static IntPtr FindWindowByTitle(string titlePart)
+        {
+            IntPtr foundHwnd = IntPtr.Zero;
+            IntPtr shellWindow = GetShellWindow();
+
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (hWnd == shellWindow) return true;
+                if (!IsWindowVisible(hWnd)) return true;
+
+                int length = GetWindowTextLength(hWnd);
+                if (length == 0) return true;
+
+                System.Text.StringBuilder builder = new System.Text.StringBuilder(length);
+                GetWindowText(hWnd, builder, length + 1);
+
+                string windowTitle = builder.ToString();
+                // 정확히 일치하거나 포함하는 경우 (여기서는 편의상 Contains로 구현, 필요시 Exact Match 옵션 추가 가능)
+                if (windowTitle.Contains(titlePart, StringComparison.OrdinalIgnoreCase))
+                {
+                    foundHwnd = hWnd;
+                    return false; // Stop enumeration
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            return foundHwnd;
+        }
+
         #endregion
 
         /// <summary>

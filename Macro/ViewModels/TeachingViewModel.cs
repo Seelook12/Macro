@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Text.Json;
@@ -24,8 +25,8 @@ namespace Macro.ViewModels
         private ObservableCollection<string> _sequenceNames = new ObservableCollection<string>();
 
         // ComboBox Lists
-        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change" };
-        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press" };
+        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change", "Variable Compare" };
+        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press", "Variable Set", "Window Control" };
 
         #endregion
 
@@ -38,6 +39,18 @@ namespace Macro.ViewModels
         public ObservableCollection<SequenceItem> Sequences { get; }
 
         public ObservableCollection<string> SequenceNames => _sequenceNames;
+        public ObservableCollection<string> TargetList { get; } = new ObservableCollection<string>();
+        public List<WindowControlState> WindowControlStates { get; } = new List<WindowControlState>
+        {
+            WindowControlState.Restore,
+            WindowControlState.Maximize,
+            WindowControlState.Minimize
+        };
+        public List<WindowControlSearchMethod> SearchMethods { get; } = new List<WindowControlSearchMethod>
+        {
+            WindowControlSearchMethod.ProcessName,
+            WindowControlSearchMethod.WindowTitle
+        };
 
         public string CurrentRecipeName
         {
@@ -154,6 +167,14 @@ namespace Macro.ViewModels
         public ReactiveCommand<ImageMatchCondition, Unit> CaptureImageCommand { get; }
         public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; }
         public ReactiveCommand<object, Unit> PickRegionCommand { get; }
+        public ReactiveCommand<WindowControlAction, Unit> RefreshTargetListCommand { get; }
+
+        public ReactiveCommand<SequenceItem, Unit> MoveSequenceUpCommand { get; }
+        public ReactiveCommand<SequenceItem, Unit> MoveSequenceDownCommand { get; }
+        public ReactiveCommand<Unit, Unit> CopySequenceCommand { get; }
+        public ReactiveCommand<Unit, Unit> PasteSequenceCommand { get; }
+
+        private string _clipboardJson = string.Empty;
 
         #endregion
 
@@ -181,6 +202,40 @@ namespace Macro.ViewModels
             SaveCommand = ReactiveCommand.CreateFromTask(SaveSequencesAsync);
             RunSingleStepCommand = ReactiveCommand.CreateFromTask<SequenceItem>(RunSingleStepAsync);
             
+            MoveSequenceUpCommand = ReactiveCommand.Create<SequenceItem>(MoveSequenceUp);
+            MoveSequenceDownCommand = ReactiveCommand.Create<SequenceItem>(MoveSequenceDown);
+            CopySequenceCommand = ReactiveCommand.Create(CopySequence, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item != null));
+            PasteSequenceCommand = ReactiveCommand.Create(PasteSequence);
+
+            RefreshTargetListCommand = ReactiveCommand.CreateFromTask<WindowControlAction>(async (action) => 
+            {
+                if (action == null) return;
+
+                await Task.Run(() =>
+                {
+                    List<string> items = new List<string>();
+
+                    if (action.SearchMethod == WindowControlSearchMethod.ProcessName)
+                    {
+                        var processes = System.Diagnostics.Process.GetProcesses();
+                        items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
+                    }
+                    else
+                    {
+                        items = InputHelper.GetOpenWindows().Distinct().OrderBy(n => n).ToList();
+                    }
+                    
+                    RxApp.MainThreadScheduler.Schedule(() =>
+                    {
+                        TargetList.Clear();
+                        foreach (var name in items)
+                        {
+                            TargetList.Add(name);
+                        }
+                    });
+                });
+            });
+
             // 좌표 픽업 커맨드
             PickCoordinateCommand = ReactiveCommand.CreateFromTask(async () =>
             {
@@ -509,6 +564,8 @@ namespace Macro.ViewModels
                 IdleAction => "Idle",
                 MouseClickAction => "Mouse Click",
                 KeyPressAction => "Key Press",
+                VariableSetAction => "Variable Set",
+                WindowControlAction => "Window Control",
                 _ => "Idle" // Default
             };
         }
@@ -522,6 +579,7 @@ namespace Macro.ViewModels
                 "Delay" => new DelayCondition { DelayTimeMs = 1000 },
                 "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
                 "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
+                "Variable Compare" => new VariableCompareCondition(),
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
@@ -536,6 +594,7 @@ namespace Macro.ViewModels
                 "Delay" => new DelayCondition { DelayTimeMs = 500 },
                 "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
                 "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
+                "Variable Compare" => new VariableCompareCondition(),
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
@@ -556,6 +615,17 @@ namespace Macro.ViewModels
             else if (type == "Key Press" && !(SelectedSequence.Action is KeyPressAction))
             {
                 SelectedSequence.Action = new KeyPressAction();
+            }
+            else if (type == "Variable Set" && !(SelectedSequence.Action is VariableSetAction))
+            {
+                SelectedSequence.Action = new VariableSetAction();
+            }
+            else if (type == "Window Control" && !(SelectedSequence.Action is WindowControlAction))
+            {
+                var action = new WindowControlAction();
+                SelectedSequence.Action = action;
+                // 창 제어 액션을 처음 선택했을 때 목록을 한번 갱신해주면 사용자 경험이 좋음
+                RefreshTargetListCommand.Execute(action).Subscribe();
             }
             this.RaisePropertyChanged(nameof(SelectedActionType));
         }
@@ -666,6 +736,80 @@ namespace Macro.ViewModels
             if (!IsImagePathUsed(path, null!))
             {
                 try { File.Delete(path); } catch { }
+            }
+        }
+
+        private void MoveSequenceUp(SequenceItem item)
+        {
+            int index = Sequences.IndexOf(item);
+            if (index > 0)
+            {
+                Sequences.Move(index, index - 1);
+            }
+        }
+
+        private void MoveSequenceDown(SequenceItem item)
+        {
+            int index = Sequences.IndexOf(item);
+            if (index < Sequences.Count - 1)
+            {
+                Sequences.Move(index, index + 1);
+            }
+        }
+
+        private void CopySequence()
+        {
+            if (SelectedSequence != null)
+            {
+                try
+                {
+                    _clipboardJson = JsonSerializer.Serialize(SelectedSequence, GetJsonOptions());
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Copy failed: {ex.Message}");
+                }
+            }
+        }
+
+        private void PasteSequence()
+        {
+            if (string.IsNullOrEmpty(_clipboardJson)) return;
+
+            try
+            {
+                var newItem = JsonSerializer.Deserialize<SequenceItem>(_clipboardJson, GetJsonOptions());
+                if (newItem != null)
+                {
+                    // ID 재생성 (중복 방지)
+                    newItem.ResetId();
+                    newItem.Name += " (Copy)";
+
+                    // 현재 선택된 위치 바로 뒤에 추가, 선택된 게 없으면 맨 뒤에 추가
+                    if (SelectedSequence != null)
+                    {
+                        int index = Sequences.IndexOf(SelectedSequence);
+                        if (index >= 0 && index < Sequences.Count)
+                        {
+                            Sequences.Insert(index + 1, newItem);
+                        }
+                        else
+                        {
+                            Sequences.Add(newItem);
+                        }
+                    }
+                    else
+                    {
+                        Sequences.Add(newItem);
+                    }
+                    
+                    // 새로 붙여넣은 아이템 선택
+                    SelectedSequence = newItem;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Paste failed: {ex.Message}");
             }
         }
 

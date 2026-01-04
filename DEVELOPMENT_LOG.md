@@ -116,6 +116,14 @@
     - **Visual Feedback**: `ProgressBar`를 통해 전체 시퀀스의 진행률을 시각화.
     - **Auto Scroll**: 로그 발생 시 최신 로그 위치로 자동 스크롤되는 UX 개선.
 
+### 3.16. 창 제어 및 편집 기능 강화 (2026-01-04)
+- **Window Control Action**: 프로세스 이름 또는 윈도우 타이틀을 기반으로 창 최대화/최소화/복원 기능 추가.
+- **Teaching Editor UI**:
+  - **Localization**: 주요 인터페이스 전면 한글화.
+  - **Sequence Management**: 스텝 순서 변경(위/아래) 및 복사/붙여넣기(Copy/Paste) 기능 구현.
+  - **Smart Paste**: 복사 시 고유 ID 재생성 로직 적용으로 충돌 방지.
+- **Search Logic**: 실행 중인 프로세스 및 윈도우 타이틀 목록 자동 갱신 기능 추가.
+
 5. **Fatal User Callback Exception (0xc000041d)**
     - 증상: 매크로 실행 중 `TargetInvocationException`과 함께 프로그램이 즉시 종료됨.
     - 원인: 

@@ -28,11 +28,19 @@ namespace Macro.Models
     [JsonDerivedType(typeof(KeyPressAction), typeDiscriminator: nameof(KeyPressAction))]
     [JsonDerivedType(typeof(VariableSetAction), typeDiscriminator: nameof(VariableSetAction))]
     [JsonDerivedType(typeof(IdleAction), typeDiscriminator: nameof(IdleAction))]
+    [JsonDerivedType(typeof(WindowControlAction), typeDiscriminator: nameof(WindowControlAction))]
     public interface IMacroAction : IReactiveObject
     {
         Task ExecuteAsync(System.Windows.Point? conditionPoint = null);
         string FailJumpName { get; set; }
         string FailJumpId { get; set; }
+    }
+
+    public enum WindowControlState
+    {
+        Maximize,
+        Minimize,
+        Restore
     }
 
     #endregion
@@ -620,6 +628,116 @@ namespace Macro.Models
         }
     }
 
+    public enum WindowControlSearchMethod
+    {
+        ProcessName,
+        WindowTitle
+    }
+
+    public class WindowControlAction : ReactiveObject, IMacroAction
+    {
+        private string _targetName = string.Empty; // ProcessName or WindowTitle
+        private WindowControlSearchMethod _searchMethod = WindowControlSearchMethod.ProcessName;
+        private WindowControlState _windowState = WindowControlState.Restore;
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        // 하위 호환성을 위해 ProcessName 속성은 유지하되 TargetName과 연동
+        public string ProcessName
+        {
+            get => _targetName;
+            set => this.RaiseAndSetIfChanged(ref _targetName, value);
+        }
+
+        public string TargetName
+        {
+            get => _targetName;
+            set => this.RaiseAndSetIfChanged(ref _targetName, value);
+        }
+
+        public WindowControlSearchMethod SearchMethod
+        {
+            get => _searchMethod;
+            set => this.RaiseAndSetIfChanged(ref _searchMethod, value);
+        }
+
+        public WindowControlState WindowState
+        {
+            get => _windowState;
+            set => this.RaiseAndSetIfChanged(ref _windowState, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        {
+            await Task.Run(() =>
+            {
+                if (string.IsNullOrEmpty(TargetName))
+                    throw new Exception("Target name (Process or Title) is empty.");
+
+                IntPtr hWnd = IntPtr.Zero;
+
+                if (SearchMethod == WindowControlSearchMethod.ProcessName)
+                {
+                    var processes = System.Diagnostics.Process.GetProcessesByName(TargetName);
+                    if (processes.Length == 0)
+                        throw new Exception($"Process '{TargetName}' not found.");
+
+                    // Main Window가 있는 첫 번째 프로세스 찾기
+                    foreach (var p in processes)
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            hWnd = p.MainWindowHandle;
+                            break;
+                        }
+                    }
+                    
+                    if (hWnd == IntPtr.Zero)
+                        throw new Exception($"Process '{TargetName}' found but has no main window.");
+                }
+                else // WindowTitle
+                {
+                    hWnd = InputHelper.FindWindowByTitle(TargetName);
+                    if (hWnd == IntPtr.Zero)
+                        throw new Exception($"Window with title containing '{TargetName}' not found.");
+                }
+
+                int nCmdShow = InputHelper.SW_RESTORE;
+                switch (WindowState)
+                {
+                    case WindowControlState.Maximize:
+                        nCmdShow = InputHelper.SW_SHOWMAXIMIZED;
+                        break;
+                    case WindowControlState.Minimize:
+                        nCmdShow = InputHelper.SW_SHOWMINIMIZED;
+                        break;
+                    case WindowControlState.Restore:
+                        nCmdShow = InputHelper.SW_RESTORE;
+                        break;
+                }
+
+                InputHelper.ShowWindow(hWnd, nCmdShow);
+                
+                if (WindowState != WindowControlState.Minimize)
+                {
+                    InputHelper.SetForegroundWindow(hWnd);
+                }
+            });
+        }
+    }
+
     #endregion
 
     #region SequenceItem
@@ -723,6 +841,11 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _successJumpId, value);
         }
 // ... (Pre/Post Condition 속성들에 대해서도 동일하게 FailJumpId 적용 필요)
+
+        public void ResetId()
+        {
+            _id = Guid.NewGuid();
+        }
     }
 
     #endregion

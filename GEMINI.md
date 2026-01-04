@@ -15,6 +15,11 @@
   5. **OpenCV**: `Mat` 객체 사용 시 반드시 `using` 문으로 메모리 해제 처리할 것.
   6. **View 패턴**: `ReactiveUserControl`보다 `UserControl` + `IViewFor<T>` + `WhenActivated` 명시적 바인딩 패턴이 이 프로젝트에서 더 안정적임.
 - **이미지 매칭**: `OpenCvSharp4`를 사용하며, 템플릿 이미지는 레시피 폴더에 타임스탬프와 함께 복사하여 상대적으로 관리함.
+- **레시피 계층 구조**:
+  1. `SequenceGroup`은 하위 `SequenceItem`들을 관리하며, 윈도우 설정(TargetProcessName 등)을 공통으로 소유함.
+  2. 실행 엔진(`MacroEngineService`)은 평탄화된 리스트를 요구하므로, 실행 시점에 설정을 주입하고 변환(`DashboardViewModel`)해야 함.
+  3. 흐름 제어(Jump) 시 '이름'이 아닌 `SuccessJumpId` 등 Guid 기반의 ID를 우선 사용하여 바인딩의 안정성을 확보할 것.
+  4. UI 갱신 시 `JumpTargets` 컬렉션이 `Clear()` 되면 ComboBox 바인딩이 끊길 수 있으므로, 대량 로드(`LoadData`) 시에는 플래그를 사용하여 갱신을 제어해야 함.
 --- 
 - `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
 - `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

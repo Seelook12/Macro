@@ -129,7 +129,8 @@ namespace Macro.Utils
 
         public static IntPtr FindWindowByTitle(string titlePart)
         {
-            IntPtr foundHwnd = IntPtr.Zero;
+            IntPtr exactMatch = IntPtr.Zero;
+            IntPtr partialMatch = IntPtr.Zero;
             IntPtr shellWindow = GetShellWindow();
 
             EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
@@ -144,16 +145,24 @@ namespace Macro.Utils
                 GetWindowText(hWnd, builder, length + 1);
 
                 string windowTitle = builder.ToString();
-                // 정확히 일치하거나 포함하는 경우 (여기서는 편의상 Contains로 구현, 필요시 Exact Match 옵션 추가 가능)
-                if (windowTitle.Contains(titlePart, StringComparison.OrdinalIgnoreCase))
+
+                // 1. 완전 일치 우선
+                if (string.Equals(windowTitle, titlePart, StringComparison.OrdinalIgnoreCase))
                 {
-                    foundHwnd = hWnd;
-                    return false; // Stop enumeration
+                    exactMatch = hWnd;
+                    return false; // Stop enumeration immediately
                 }
+
+                // 2. 부분 일치 (후보군으로 저장)
+                if (partialMatch == IntPtr.Zero && windowTitle.Contains(titlePart, StringComparison.OrdinalIgnoreCase))
+                {
+                    partialMatch = hWnd;
+                }
+
                 return true;
             }, IntPtr.Zero);
 
-            return foundHwnd;
+            return exactMatch != IntPtr.Zero ? exactMatch : partialMatch;
         }
 
         #endregion

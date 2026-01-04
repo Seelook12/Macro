@@ -22,10 +22,11 @@ namespace Macro.ViewModels
     {
         #region Fields
 
+        private SequenceGroup? _selectedGroup;
         private SequenceItem? _selectedSequence;
         private string _currentRecipeName = "No Recipe Selected";
-        private ObservableCollection<string> _sequenceNames = new ObservableCollection<string>();
-
+        private bool _isLoading;
+        
         // ComboBox Lists
         public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change", "Variable Compare" };
         public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press", "Variable Set", "Window Control" };
@@ -38,9 +39,9 @@ namespace Macro.ViewModels
         public IScreen HostScreen { get; }
         public ViewModelActivator Activator { get; } = new ViewModelActivator();
 
-        public ObservableCollection<SequenceItem> Sequences { get; }
+        public ObservableCollection<SequenceGroup> Groups { get; } = new ObservableCollection<SequenceGroup>();
 
-        public ObservableCollection<string> SequenceNames => _sequenceNames;
+        public ObservableCollection<JumpTargetViewModel> JumpTargets { get; } = new ObservableCollection<JumpTargetViewModel>();
         public ObservableCollection<string> TargetList { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> ProcessList { get; } = new ObservableCollection<string>(); // New Collection
         public List<WindowControlState> WindowControlStates { get; } = new List<WindowControlState>
@@ -65,6 +66,12 @@ namespace Macro.ViewModels
         {
             get => _currentRecipeName;
             set => this.RaiseAndSetIfChanged(ref _currentRecipeName, value);
+        }
+
+        public SequenceGroup? SelectedGroup
+        {
+            get => _selectedGroup;
+            set => this.RaiseAndSetIfChanged(ref _selectedGroup, value);
         }
 
         public SequenceItem? SelectedSequence
@@ -96,81 +103,12 @@ namespace Macro.ViewModels
             set => SetPostCondition(value);
         }
 
-        // Jump Target Selection Helpers (Name <-> Id Mapping)
-        public string SuccessJumpTarget
-        {
-            get => GetJumpNameFromId(SelectedSequence?.SuccessJumpId, SelectedSequence?.SuccessJumpName);
-            set
-            {
-                if (SelectedSequence != null)
-                {
-                    SelectedSequence.SuccessJumpName = value;
-                    SelectedSequence.SuccessJumpId = GetJumpIdFromName(value);
-                    this.RaisePropertyChanged(nameof(SuccessJumpTarget));
-                }
-            }
-        }
-
-        public string ProcessNotFoundJumpTarget
-        {
-            get => GetJumpNameFromId(SelectedSequence?.ProcessNotFoundJumpId, SelectedSequence?.ProcessNotFoundJumpName);
-            set
-            {
-                if (SelectedSequence != null)
-                {
-                    SelectedSequence.ProcessNotFoundJumpName = value;
-                    SelectedSequence.ProcessNotFoundJumpId = GetJumpIdFromName(value);
-                    this.RaisePropertyChanged(nameof(ProcessNotFoundJumpTarget));
-                }
-            }
-        }
-
-        public string PreFailJumpTarget
-        {
-            get => GetJumpNameFromId(SelectedSequence?.PreCondition?.FailJumpId, SelectedSequence?.PreCondition?.FailJumpName);
-            set
-            {
-                if (SelectedSequence?.PreCondition != null)
-                {
-                    SelectedSequence.PreCondition.FailJumpName = value;
-                    SelectedSequence.PreCondition.FailJumpId = GetJumpIdFromName(value);
-                    this.RaisePropertyChanged(nameof(PreFailJumpTarget));
-                }
-            }
-        }
-
-        public string ActionFailJumpTarget
-        {
-            get => GetJumpNameFromId(SelectedSequence?.Action?.FailJumpId, SelectedSequence?.Action?.FailJumpName);
-            set
-            {
-                if (SelectedSequence?.Action != null)
-                {
-                    SelectedSequence.Action.FailJumpName = value;
-                    SelectedSequence.Action.FailJumpId = GetJumpIdFromName(value);
-                    this.RaisePropertyChanged(nameof(ActionFailJumpTarget));
-                }
-            }
-        }
-
-        public string PostFailJumpTarget
-        {
-            get => GetJumpNameFromId(SelectedSequence?.PostCondition?.FailJumpId, SelectedSequence?.PostCondition?.FailJumpName);
-            set
-            {
-                if (SelectedSequence?.PostCondition != null)
-                {
-                    SelectedSequence.PostCondition.FailJumpName = value;
-                    SelectedSequence.PostCondition.FailJumpId = GetJumpIdFromName(value);
-                    this.RaisePropertyChanged(nameof(PostFailJumpTarget));
-                }
-            }
-        }
-
         #endregion
 
         #region Commands
 
+        public ReactiveCommand<Unit, Unit> AddGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> RemoveGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> AddSequenceCommand { get; }
         public ReactiveCommand<Unit, Unit> RemoveSequenceCommand { get; }
         public ReactiveCommand<Unit, Unit> SaveCommand { get; }
@@ -191,14 +129,22 @@ namespace Macro.ViewModels
         public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; }
         public ReactiveCommand<object, Unit> PickRegionCommand { get; }
         public ReactiveCommand<WindowControlAction, Unit> RefreshTargetListCommand { get; }
-        public ReactiveCommand<SequenceItem, Unit> RefreshContextTargetCommand { get; } // Updated Command
+        public ReactiveCommand<SequenceGroup, Unit> RefreshContextTargetCommand { get; } // Updated Command for Group
 
         public ReactiveCommand<SequenceItem, Unit> MoveSequenceUpCommand { get; }
         public ReactiveCommand<SequenceItem, Unit> MoveSequenceDownCommand { get; }
+        public ReactiveCommand<SequenceGroup, Unit> MoveGroupUpCommand { get; }
+        public ReactiveCommand<SequenceGroup, Unit> MoveGroupDownCommand { get; }
+        
         public ReactiveCommand<Unit, Unit> CopySequenceCommand { get; }
         public ReactiveCommand<Unit, Unit> PasteSequenceCommand { get; }
+        
+        public ReactiveCommand<Unit, Unit> CopyGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> PasteGroupCommand { get; }
+        public ReactiveCommand<Unit, Unit> DuplicateGroupCommand { get; }
 
         private string _clipboardJson = string.Empty;
+        private bool _clipboardIsGroup = false;
 
         private System.Windows.Media.Imaging.BitmapSource? _testResultImage;
         public System.Windows.Media.Imaging.BitmapSource? TestResultImage
@@ -214,32 +160,40 @@ namespace Macro.ViewModels
         public TeachingViewModel(IScreen screen)
         {
             HostScreen = screen;
-            Sequences = new ObservableCollection<SequenceItem>();
-
-            // 스텝 이름 목록 자동 갱신
-            var sequencesChanged = Observable.FromEventPattern<System.Collections.Specialized.NotifyCollectionChangedEventHandler, System.Collections.Specialized.NotifyCollectionChangedEventArgs>(
-                h => Sequences.CollectionChanged += h,
-                h => Sequences.CollectionChanged -= h);
-
-            sequencesChanged
-                .Subscribe(_ => UpdateSequenceNames());
-
+            
+            // 그룹 변경 감지 (이름 목록 갱신)
+            Groups.CollectionChanged += (s, e) => UpdateJumpTargets();
+            
             // 초기 목록 생성
-            UpdateSequenceNames();
+            UpdateJumpTargets();
 
             // Initialize Commands
-            AddSequenceCommand = ReactiveCommand.Create(AddSequence);
+            AddGroupCommand = ReactiveCommand.Create(AddGroup);
+            RemoveGroupCommand = ReactiveCommand.Create(RemoveGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+            
+            AddSequenceCommand = ReactiveCommand.Create(AddSequence, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
             RemoveSequenceCommand = ReactiveCommand.Create(RemoveSequence, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item != null));
+            
             SaveCommand = ReactiveCommand.CreateFromTask(SaveSequencesAsync);
             RunSingleStepCommand = ReactiveCommand.CreateFromTask<SequenceItem>(RunSingleStepAsync);
             
+            MoveGroupUpCommand = ReactiveCommand.Create<SequenceGroup>(MoveGroupUp);
+            MoveGroupDownCommand = ReactiveCommand.Create<SequenceGroup>(MoveGroupDown);
             MoveSequenceUpCommand = ReactiveCommand.Create<SequenceItem>(MoveSequenceUp);
             MoveSequenceDownCommand = ReactiveCommand.Create<SequenceItem>(MoveSequenceDown);
+            
             CopySequenceCommand = ReactiveCommand.Create(CopySequence, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item != null));
-            PasteSequenceCommand = ReactiveCommand.Create(PasteSequence);
+            PasteSequenceCommand = ReactiveCommand.Create(PasteSequence, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
 
-            RefreshTargetListCommand = ReactiveCommand.CreateFromTask<WindowControlAction>(async (action) => 
-            {
+            CopyGroupCommand = ReactiveCommand.Create(CopyGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+
+            PasteGroupCommand = ReactiveCommand.Create(PasteGroup);
+
+            DuplicateGroupCommand = ReactiveCommand.Create(DuplicateGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+
+
+
+            RefreshTargetListCommand = ReactiveCommand.CreateFromTask<WindowControlAction>(async (action) =>            {
                 if (action == null) return;
 
                 await Task.Run(() =>
@@ -267,15 +221,15 @@ namespace Macro.ViewModels
                 });
             });
 
-            // Context Target Refresh Command
-            RefreshContextTargetCommand = ReactiveCommand.CreateFromTask<SequenceItem>(async (item) =>
+            // Context Target Refresh Command (For Group)
+            RefreshContextTargetCommand = ReactiveCommand.CreateFromTask<SequenceGroup>(async (group) =>
             {
-                if (item == null) return;
+                if (group == null) return;
                 
                 await Task.Run(() =>
                 {
                     List<string> items = new List<string>();
-                    if (item.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
+                    if (group.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
                     {
                         var processes = System.Diagnostics.Process.GetProcesses();
                         items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
@@ -305,15 +259,18 @@ namespace Macro.ViewModels
                     if (point.HasValue)
                     {
                         var p = point.Value;
+                        
+                        // 현재 시퀀스가 속한 그룹 찾기
+                        var parentGroup = FindParentGroup(SelectedSequence);
 
-                        if (SelectedSequence.CoordinateMode == CoordinateMode.WindowRelative)
+                        if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
                         {
-                            var winInfo = GetTargetWindowInfo(SelectedSequence);
+                            var winInfo = GetTargetWindowInfo(parentGroup);
                             if (winInfo.HasValue)
                             {
                                 // 자동 기준 해상도 설정
-                                SelectedSequence.RefWindowWidth = winInfo.Value.Width;
-                                SelectedSequence.RefWindowHeight = winInfo.Value.Height;
+                                parentGroup.RefWindowWidth = winInfo.Value.Width;
+                                parentGroup.RefWindowHeight = winInfo.Value.Height;
 
                                 // 상대 좌표 변환
                                 mouseAction.X = (int)(p.X - winInfo.Value.X);
@@ -370,6 +327,9 @@ namespace Macro.ViewModels
                     condition.TestResult = "Searching...";
                     TestResultImage = null;
                     
+                    // Find Parent Group for Context
+                    var parentGroup = SelectedGroup ?? FindParentGroup(SelectedSequence);
+
                     await Task.Run(() => 
                     {
                         var captureSource = ScreenCaptureHelper.GetScreenCapture();
@@ -385,15 +345,15 @@ namespace Macro.ViewModels
                         double winX = 0;
                         double winY = 0;
 
-                        if (SelectedSequence != null && SelectedSequence.CoordinateMode == CoordinateMode.WindowRelative)
+                        if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
                         {
-                            var winInfo = GetTargetWindowInfo(SelectedSequence);
+                            var winInfo = GetTargetWindowInfo(parentGroup);
                             if (winInfo.HasValue)
                             {
-                                if (SelectedSequence.RefWindowWidth > 0 && SelectedSequence.RefWindowHeight > 0)
+                                if (parentGroup.RefWindowWidth > 0 && parentGroup.RefWindowHeight > 0)
                                 {
-                                    scaleX = (double)winInfo.Value.Width / SelectedSequence.RefWindowWidth;
-                                    scaleY = (double)winInfo.Value.Height / SelectedSequence.RefWindowHeight;
+                                    scaleX = (double)winInfo.Value.Width / parentGroup.RefWindowWidth;
+                                    scaleY = (double)winInfo.Value.Height / parentGroup.RefWindowHeight;
                                 }
                                 winX = winInfo.Value.X;
                                 winY = winInfo.Value.Y;
@@ -487,104 +447,12 @@ namespace Macro.ViewModels
                 }
             });
 
-            // 영역 선택 커맨드 (범용)
-            PickRegionCommand = ReactiveCommand.CreateFromTask<object>(async obj =>
-            {
-                if (obj == null || SelectedSequence == null) return;
-
-                var rect = await GetRegionInteraction.Handle(Unit.Default);
-                if (rect.HasValue)
-                {
-                    var r = rect.Value;
-                    double targetX = r.X;
-                    double targetY = r.Y;
-
-                    if (SelectedSequence.CoordinateMode == CoordinateMode.WindowRelative)
-                    {
-                        var winInfo = GetTargetWindowInfo(SelectedSequence);
-                        if (winInfo.HasValue)
-                        {
-                            // 자동 기준 해상도 설정
-                            SelectedSequence.RefWindowWidth = winInfo.Value.Width;
-                            SelectedSequence.RefWindowHeight = winInfo.Value.Height;
-
-                            // 상대 좌표 변환
-                            targetX -= winInfo.Value.X;
-                            targetY -= winInfo.Value.Y;
-                        }
-                    }
-
-                    if (obj is ImageMatchCondition imgMatch)
-                    {
-                        imgMatch.UseRegion = true;
-                        imgMatch.RegionX = (int)targetX;
-                        imgMatch.RegionY = (int)targetY;
-                        imgMatch.RegionW = (int)r.Width;
-                        imgMatch.RegionH = (int)r.Height;
-                    }
-                    else if (obj is GrayChangeCondition grayChange)
-                    {
-                        grayChange.X = (int)targetX;
-                        grayChange.Y = (int)targetY;
-                        grayChange.Width = (int)r.Width;
-                        grayChange.Height = (int)r.Height;
-                    }
-                }
-            });
-
             this.WhenActivated(disposables =>
             {
-                // 점프 이름 변경 시 ID 자동 동기화 관찰
-                var d1 = this.WhenAnyValue(x => x.SelectedSequence)
-                    .WhereNotNull()
-                    .Subscribe(seq =>
-                    {
-                        // SuccessJumpName 감시
-                        var d2 = seq.WhenAnyValue(x => x.SuccessJumpName)
-                            .Subscribe(name => seq.SuccessJumpId = GetJumpIdFromName(name));
-                        disposables.Add(d2);
-
-                        // ProcessNotFoundJumpName 감시
-                        var dP = seq.WhenAnyValue(x => x.ProcessNotFoundJumpName)
-                            .Subscribe(name => seq.ProcessNotFoundJumpId = GetJumpIdFromName(name));
-                        disposables.Add(dP);
-
-                        // PreCondition FailJumpName 감시
-                        var d3 = seq.WhenAnyValue(x => x.PreCondition)
-                            .WhereNotNull()
-                            .Subscribe(cond =>
-                            {
-                                var d4 = cond.WhenAnyValue(x => x.FailJumpName)
-                                    .Subscribe(name => cond.FailJumpId = GetJumpIdFromName(name));
-                                disposables.Add(d4);
-                            });
-                        disposables.Add(d3);
-
-                        // Action FailJumpName 감시
-                        var d5 = seq.WhenAnyValue(x => x.Action)
-                            .WhereNotNull()
-                            .Subscribe(act =>
-                            {
-                                var d6 = act.WhenAnyValue(x => x.FailJumpName)
-                                    .Subscribe(name => act.FailJumpId = GetJumpIdFromName(name));
-                                disposables.Add(d6);
-                            });
-                        disposables.Add(d5);
-
-                        // PostCondition FailJumpName 감시
-                        var d7 = seq.WhenAnyValue(x => x.PostCondition)
-                            .WhereNotNull()
-                            .Subscribe(cond =>
-                            {
-                                var d8 = cond.WhenAnyValue(x => x.FailJumpName)
-                                    .Subscribe(name => cond.FailJumpId = GetJumpIdFromName(name));
-                                disposables.Add(d8);
-                            });
-                        disposables.Add(d7);
-
-                    });
-                disposables.Add(d1);
-
+                // 점프 이름 변경 시 ID 자동 동기화 관찰 제거 (이제 ID 직접 바인딩)
+                // 하지만 이름 목록이 바뀔 때 JumpTargets를 갱신해야 하는 것은 여전함.
+                // 이미 Groups.CollectionChanged에서 처리 중.
+                
                 // 1. 화면 진입 시 초기 로드
                 LoadData();
                 
@@ -600,18 +468,45 @@ namespace Macro.ViewModels
 
         #region Logic Methods
 
-        private void UpdateSequenceNames()
+        private void UpdateJumpTargets()
         {
-            _sequenceNames.Clear();
-            _sequenceNames.Add("(Next Step)");
-            _sequenceNames.Add("(Ignore & Continue)");
-            _sequenceNames.Add("(Stop Execution)");
+            if (_isLoading) return;
+
+            // 기존 선택된 ID 저장 (선택 복원 시도)
+            // 하지만 View 바인딩이 TwoWay라서 Clear() 시 null이 되어버리는 문제가 있으므로
+            // 사실상 Clear()를 피하는 게 상책이나, ObservableCollection에서 부분 업데이트는 복잡함.
+            // 일단 재생성하되, View에서 바인딩이 끊기지 않도록 하는 것은 NotifyTypeChanges에서 호출을 뺀 것으로 해결됨.
             
-            foreach (var item in Sequences)
+            JumpTargets.Clear();
+            
+            // 1. System Options
+            JumpTargets.Add(new JumpTargetViewModel { Id = "(Next Step)", DisplayName = "(Next Step)", IsGroup = false });
+            JumpTargets.Add(new JumpTargetViewModel { Id = "(Ignore & Continue)", DisplayName = "(Ignore & Continue)", IsGroup = false });
+            JumpTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
+
+            // 2. Groups and Items
+            foreach (var group in Groups)
             {
-                if (!string.IsNullOrEmpty(item.Name))
+                string groupTargetId = group.Items.Count > 0 ? group.Items[0].Id.ToString() : string.Empty;
+                
+                JumpTargets.Add(new JumpTargetViewModel 
+                { 
+                    Id = groupTargetId, 
+                    DisplayName = $"📁 {group.Name}", 
+                    IsGroup = true 
+                });
+
+                foreach(var item in group.Items)
                 {
-                    _sequenceNames.Add(item.Name);
+                    if (!string.IsNullOrEmpty(item.Name))
+                    {
+                        JumpTargets.Add(new JumpTargetViewModel 
+                        { 
+                            Id = item.Id.ToString(), 
+                            DisplayName = $"   📄 {item.Name}", 
+                            IsGroup = false 
+                        });
+                    }
                 }
             }
         }
@@ -619,44 +514,111 @@ namespace Macro.ViewModels
         private async Task RunSingleStepAsync(SequenceItem item)
         {
             if (item == null) return;
+
+            // 실행 시 부모 그룹의 컨텍스트를 주입한 복사본(혹은 임시 수정본)을 사용해야 함.
+            var parentGroup = FindParentGroup(item);
+            if (parentGroup != null)
+            {
+                // SequenceItem의 Context 속성들을 Group 값으로 덮어씀 (메모리상의 객체만 수정)
+                item.CoordinateMode = parentGroup.CoordinateMode;
+                item.ContextSearchMethod = parentGroup.ContextSearchMethod;
+                item.TargetProcessName = parentGroup.TargetProcessName;
+                item.ContextWindowState = parentGroup.ContextWindowState;
+                item.ProcessNotFoundJumpName = parentGroup.ProcessNotFoundJumpName;
+                item.ProcessNotFoundJumpId = parentGroup.ProcessNotFoundJumpId;
+                item.RefWindowWidth = parentGroup.RefWindowWidth;
+                item.RefWindowHeight = parentGroup.RefWindowHeight;
+            }
+
             await MacroEngineService.Instance.RunSingleStepAsync(item);
         }
 
         private void LoadData()
         {
-            Sequences.Clear();
-            SelectedSequence = null;
-
-            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
-            if (currentRecipe == null || string.IsNullOrEmpty(currentRecipe.FilePath))
-            {
-                CurrentRecipeName = "No Recipe Selected";
-                return;
-            }
-
-            CurrentRecipeName = currentRecipe.FileName;
-
+            _isLoading = true;
             try
             {
-                if (File.Exists(currentRecipe.FilePath))
+                Groups.Clear();
+                SelectedGroup = null;
+                SelectedSequence = null;
+
+                var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+                if (currentRecipe == null || string.IsNullOrEmpty(currentRecipe.FilePath))
                 {
-                    var json = File.ReadAllText(currentRecipe.FilePath);
-                    if (!string.IsNullOrWhiteSpace(json) && json != "{}")
+                    CurrentRecipeName = "No Recipe Selected";
+                    return;
+                }
+
+                CurrentRecipeName = currentRecipe.FileName;
+
+                try
+                {
+                    if (File.Exists(currentRecipe.FilePath))
                     {
-                        var loadedData = JsonSerializer.Deserialize<List<SequenceItem>>(json, GetJsonOptions());
-                        if (loadedData != null)
+                        var json = File.ReadAllText(currentRecipe.FilePath);
+                        if (!string.IsNullOrWhiteSpace(json) && json != "{}")
                         {
-                            foreach (var item in loadedData)
+                            var options = GetJsonOptions();
+
+                            try
                             {
-                                Sequences.Add(item);
+                                // 1. Try Loading as Group List (New Format)
+                                var loadedGroups = JsonSerializer.Deserialize<List<SequenceGroup>>(json, options);
+                                if (loadedGroups != null && loadedGroups.Count > 0 && loadedGroups[0].Items != null)
+                                {
+                                    foreach (var g in loadedGroups) Groups.Add(g);
+                                }
+                                else
+                                {
+                                    throw new Exception("Not a group list");
+                                }
+                            }
+                            catch
+                            {
+                                // 2. Fallback: Try Loading as Flat List (Legacy Format)
+                                try 
+                                {
+                                    var loadedItems = JsonSerializer.Deserialize<List<SequenceItem>>(json, options);
+                                    if (loadedItems != null)
+                                    {
+                                        var defaultGroup = new SequenceGroup { Name = "Default Group" };
+                                        
+                                        // 첫 번째 아이템의 설정을 그룹 설정으로 승격 (마이그레이션)
+                                        if (loadedItems.Count > 0)
+                                        {
+                                            var first = loadedItems[0];
+                                            defaultGroup.CoordinateMode = first.CoordinateMode;
+                                            defaultGroup.ContextSearchMethod = first.ContextSearchMethod;
+                                            defaultGroup.TargetProcessName = first.TargetProcessName;
+                                            defaultGroup.ContextWindowState = first.ContextWindowState;
+                                            defaultGroup.RefWindowWidth = first.RefWindowWidth;
+                                            defaultGroup.RefWindowHeight = first.RefWindowHeight;
+                                        }
+
+                                        foreach (var item in loadedItems)
+                                        {
+                                            defaultGroup.Items.Add(item);
+                                        }
+                                        Groups.Add(defaultGroup);
+                                    }
+                                }
+                                catch
+                                {
+                                    // Load Failed
+                                }
                             }
                         }
                     }
                 }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to load recipe: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to load recipe: {ex.Message}");
+                _isLoading = false;
+                UpdateJumpTargets();
             }
         }
 
@@ -670,7 +632,8 @@ namespace Macro.ViewModels
 
             try
             {
-                var json = JsonSerializer.Serialize(Sequences, GetJsonOptions());
+                // Save as Group List
+                var json = JsonSerializer.Serialize(Groups, GetJsonOptions());
                 await File.WriteAllTextAsync(currentRecipe.FilePath, json);
             }
             catch (Exception ex)
@@ -688,31 +651,21 @@ namespace Macro.ViewModels
             };
         }
 
-        // --- Helper Methods for Type Handling ---
+        // --- Helper Methods ---
+
+        private SequenceGroup? FindParentGroup(SequenceItem? item)
+        {
+            if (item == null) return null;
+            return Groups.FirstOrDefault(g => g.Items.Contains(item));
+        }
 
         private void NotifyTypeChanges()
         {
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
             this.RaisePropertyChanged(nameof(SelectedActionType));
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
-            this.RaisePropertyChanged(nameof(SuccessJumpTarget));
-            this.RaisePropertyChanged(nameof(ProcessNotFoundJumpTarget));
-        }
-
-        private string GetJumpNameFromId(string? id, string? fallbackName)
-        {
-            if (string.IsNullOrEmpty(id)) return fallbackName ?? "(Next Step)";
-            if (id == "(Next Step)" || id == "(Ignore & Continue)" || id == "(Stop Execution)") return id;
-
-            var target = Sequences.FirstOrDefault(s => s.Id.ToString() == id);
-            return target?.Name ?? fallbackName ?? "(Next Step)";
-        }
-
-        private string GetJumpIdFromName(string name)
-        {
-            if (name == "(Next Step)" || name == "(Ignore & Continue)" || name == "(Stop Execution)") return name;
-            var target = Sequences.FirstOrDefault(s => s.Name == name);
-            return target?.Id.ToString() ?? string.Empty;
+            // JumpTarget 업데이트 제거 (선택 변경 시 목록 재생성 방지)
+            // UpdateJumpTargets(); 
         }
 
         private string GetConditionType(IMacroCondition? condition)
@@ -799,17 +752,39 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedActionType));
         }
 
+        private void AddGroup()
+        {
+            var newGroup = new SequenceGroup { Name = $"Group {Groups.Count + 1}" };
+            Groups.Add(newGroup);
+            SelectedGroup = newGroup;
+            SelectedSequence = null;
+            // Groups 컬렉션이 변경되므로 생성자에서 구독한 핸들러에 의해 UpdateJumpTargets 호출됨
+        }
+
+        private void RemoveGroup()
+        {
+            if (SelectedGroup != null)
+            {
+                Groups.Remove(SelectedGroup);
+                SelectedGroup = null;
+                // Groups 컬렉션이 변경되므로 UpdateJumpTargets 호출됨
+            }
+        }
+
         private void AddSequence()
         {
+            if (SelectedGroup == null) return;
+
             var newAction = new IdleAction();
             var newItem = new SequenceItem(newAction)
             {
-                Name = $"Step {Sequences.Count + 1}",
+                Name = $"Step {SelectedGroup.Items.Count + 1}",
                 IsEnabled = true
             };
 
-            Sequences.Add(newItem);
+            SelectedGroup.Items.Add(newItem);
             SelectedSequence = newItem;
+            UpdateJumpTargets(); // Items 변경 감지용
         }
 
         private void SaveImageToRecipe(ImageMatchCondition condition, string sourcePath)
@@ -864,10 +839,13 @@ namespace Macro.ViewModels
 
         private bool IsImagePathUsed(string path, object currentCondition)
         {
-            foreach (var seq in Sequences)
+            foreach (var group in Groups)
             {
-                if (IsPathMatch(seq.PreCondition, path, currentCondition)) return true;
-                if (IsPathMatch(seq.PostCondition, path, currentCondition)) return true;
+                foreach (var seq in group.Items)
+                {
+                    if (IsPathMatch(seq.PreCondition, path, currentCondition)) return true;
+                    if (IsPathMatch(seq.PostCondition, path, currentCondition)) return true;
+                }
             }
             return false;
         }
@@ -886,16 +864,20 @@ namespace Macro.ViewModels
         {
             if (SelectedSequence != null)
             {
-                var itemToRemove = SelectedSequence;
-                Sequences.Remove(itemToRemove);
-                
-                // 삭제된 스텝의 이미지가 더 이상 안 쓰이면 파일 삭제 처리
-                if (itemToRemove.PreCondition is ImageMatchCondition preImg) 
-                    DeleteImageIfOrphaned(preImg.ImagePath);
-                if (itemToRemove.PostCondition is ImageMatchCondition postImg)
-                    DeleteImageIfOrphaned(postImg.ImagePath);
+                var parentGroup = FindParentGroup(SelectedSequence);
+                if (parentGroup != null)
+                {
+                    var itemToRemove = SelectedSequence;
+                    parentGroup.Items.Remove(itemToRemove);
+                    
+                    if (itemToRemove.PreCondition is ImageMatchCondition preImg) 
+                        DeleteImageIfOrphaned(preImg.ImagePath);
+                    if (itemToRemove.PostCondition is ImageMatchCondition postImg)
+                        DeleteImageIfOrphaned(postImg.ImagePath);
 
-                SelectedSequence = null;
+                    SelectedSequence = null;
+                    UpdateJumpTargets(); // Items 변경 감지용
+                }
             }
         }
 
@@ -908,21 +890,45 @@ namespace Macro.ViewModels
             }
         }
 
+        private void MoveGroupUp(SequenceGroup group)
+        {
+            int index = Groups.IndexOf(group);
+            if (index > 0) Groups.Move(index, index - 1);
+            // Move는 CollectionChanged 발생함
+        }
+
+        private void MoveGroupDown(SequenceGroup group)
+        {
+            int index = Groups.IndexOf(group);
+            if (index < Groups.Count - 1) Groups.Move(index, index + 1);
+            // Move는 CollectionChanged 발생함
+        }
+
         private void MoveSequenceUp(SequenceItem item)
         {
-            int index = Sequences.IndexOf(item);
-            if (index > 0)
+            var parentGroup = FindParentGroup(item);
+            if (parentGroup != null)
             {
-                Sequences.Move(index, index - 1);
+                int index = parentGroup.Items.IndexOf(item);
+                if (index > 0)
+                {
+                    parentGroup.Items.Move(index, index - 1);
+                    UpdateJumpTargets(); // 순서 변경 반영
+                }
             }
         }
 
         private void MoveSequenceDown(SequenceItem item)
         {
-            int index = Sequences.IndexOf(item);
-            if (index < Sequences.Count - 1)
+            var parentGroup = FindParentGroup(item);
+            if (parentGroup != null)
             {
-                Sequences.Move(index, index + 1);
+                int index = parentGroup.Items.IndexOf(item);
+                if (index < parentGroup.Items.Count - 1)
+                {
+                    parentGroup.Items.Move(index, index + 1);
+                    UpdateJumpTargets(); // 순서 변경 반영
+                }
             }
         }
 
@@ -931,19 +937,124 @@ namespace Macro.ViewModels
             if (SelectedSequence != null)
             {
                 try
-                {
+                {                   
                     _clipboardJson = JsonSerializer.Serialize(SelectedSequence, GetJsonOptions());
+                    _clipboardIsGroup = false;
+                }
+                catch (Exception ex)
+                {                   
+                    System.Diagnostics.Debug.WriteLine($"Copy failed: {ex.Message}");
+                }
+            }
+        }
+
+        private void CopyGroup()
+        {
+            if (SelectedGroup != null)
+            {
+                try
+                {
+                    _clipboardJson = JsonSerializer.Serialize(SelectedGroup, GetJsonOptions());
+                    _clipboardIsGroup = true;
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Copy failed: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Group Copy failed: {ex.Message}");
+                }
+            }
+        }
+
+        private void PasteGroup()
+        {
+            if (string.IsNullOrEmpty(_clipboardJson) || !_clipboardIsGroup) return;
+
+            try
+            {
+                var newGroup = JsonSerializer.Deserialize<SequenceGroup>(_clipboardJson, GetJsonOptions());
+                if (newGroup != null)
+                {
+                    newGroup.Name += " (Copy)";
+                    
+                    // 1. ID Mapping Table 생성 (Old ID -> New ID)
+                    var idMap = new Dictionary<string, string>();
+                    
+                    foreach (var item in newGroup.Items)
+                    {
+                        var oldId = item.Id.ToString();
+                        item.ResetId(); // 새 ID 발급
+                        var newId = item.Id.ToString();
+                        
+                        if (!idMap.ContainsKey(oldId))
+                        {
+                            idMap[oldId] = newId;
+                        }
+                    }
+
+                    // 2. 내부 점프 참조 보정 (Smart Remapping)
+                    // 그룹 내의 아이템끼리 연결된 점프만 새 ID로 교체하고, 외부 점프는 유지.
+                    foreach (var item in newGroup.Items)
+                    {
+                        // Success Jump
+                        if (!string.IsNullOrEmpty(item.SuccessJumpId) && idMap.ContainsKey(item.SuccessJumpId))
+                        {
+                            item.SuccessJumpId = idMap[item.SuccessJumpId];
+                        }
+
+                        // Components Fail Jump
+                        UpdateComponentJumpId(item.PreCondition, idMap);
+                        UpdateComponentJumpId(item.Action, idMap);
+                        UpdateComponentJumpId(item.PostCondition, idMap);
+                    }
+                    
+                    // 그룹 레벨의 점프 보정 (ProcessNotFoundJumpId)
+                    if (!string.IsNullOrEmpty(newGroup.ProcessNotFoundJumpId) && idMap.ContainsKey(newGroup.ProcessNotFoundJumpId))
+                    {
+                        newGroup.ProcessNotFoundJumpId = idMap[newGroup.ProcessNotFoundJumpId];
+                    }
+
+                    Groups.Add(newGroup);
+                    SelectedGroup = newGroup;
+                    SelectedSequence = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Group Paste failed: {ex.Message}");
+            }
+        }
+
+        private void DuplicateGroup()
+        {
+            if (SelectedGroup != null)
+            {
+                CopyGroup();
+                PasteGroup();
+            }
+        }
+
+        private void UpdateComponentJumpId(object? component, Dictionary<string, string> idMap)
+        {
+            if (component == null) return;
+
+            if (component is IMacroCondition cond)
+            {
+                if (!string.IsNullOrEmpty(cond.FailJumpId) && idMap.ContainsKey(cond.FailJumpId))
+                {
+                    cond.FailJumpId = idMap[cond.FailJumpId];
+                }
+            }
+            else if (component is IMacroAction act)
+            {
+                if (!string.IsNullOrEmpty(act.FailJumpId) && idMap.ContainsKey(act.FailJumpId))
+                {
+                    act.FailJumpId = idMap[act.FailJumpId];
                 }
             }
         }
 
         private void PasteSequence()
         {
-            if (string.IsNullOrEmpty(_clipboardJson)) return;
+            if (string.IsNullOrEmpty(_clipboardJson) || SelectedGroup == null || _clipboardIsGroup) return;
 
             try
             {
@@ -954,26 +1065,27 @@ namespace Macro.ViewModels
                     newItem.ResetId();
                     newItem.Name += " (Copy)";
 
-                    // 현재 선택된 위치 바로 뒤에 추가, 선택된 게 없으면 맨 뒤에 추가
                     if (SelectedSequence != null)
                     {
-                        int index = Sequences.IndexOf(SelectedSequence);
-                        if (index >= 0 && index < Sequences.Count)
+                        var parent = FindParentGroup(SelectedSequence);
+                        if (parent == SelectedGroup)
                         {
-                            Sequences.Insert(index + 1, newItem);
+                            int index = parent.Items.IndexOf(SelectedSequence);
+                            if (index >= 0) parent.Items.Insert(index + 1, newItem);
+                            else parent.Items.Add(newItem);
                         }
                         else
                         {
-                            Sequences.Add(newItem);
+                            SelectedGroup.Items.Add(newItem);
                         }
                     }
                     else
                     {
-                        Sequences.Add(newItem);
+                        SelectedGroup.Items.Add(newItem);
                     }
                     
-                    // 새로 붙여넣은 아이템 선택
                     SelectedSequence = newItem;
+                    UpdateJumpTargets(); // 추가 반영
                 }
             }
             catch (Exception ex)
@@ -982,19 +1094,19 @@ namespace Macro.ViewModels
             }
         }
 
-        private (int X, int Y, int Width, int Height)? GetTargetWindowInfo(SequenceItem item)
+        private (int X, int Y, int Width, int Height)? GetTargetWindowInfo(SequenceGroup group)
         {
-            if (item == null || string.IsNullOrEmpty(item.TargetProcessName)) return null;
+            if (group == null || string.IsNullOrEmpty(group.TargetProcessName)) return null;
 
             IntPtr hWnd = IntPtr.Zero;
-            if (item.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
+            if (group.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
             {
-                var p = System.Diagnostics.Process.GetProcessesByName(item.TargetProcessName).FirstOrDefault(x => x.MainWindowHandle != IntPtr.Zero);
+                var p = System.Diagnostics.Process.GetProcessesByName(group.TargetProcessName).FirstOrDefault(x => x.MainWindowHandle != IntPtr.Zero);
                 if (p != null) hWnd = p.MainWindowHandle;
             }
             else
             {
-                hWnd = InputHelper.FindWindowByTitle(item.TargetProcessName);
+                hWnd = InputHelper.FindWindowByTitle(group.TargetProcessName);
             }
 
             if (hWnd != IntPtr.Zero)
@@ -1011,5 +1123,12 @@ namespace Macro.ViewModels
         }
 
         #endregion
+    }
+
+    public class JumpTargetViewModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public bool IsGroup { get; set; }
     }
 }

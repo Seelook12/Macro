@@ -5,6 +5,8 @@ using ReactiveUI;
 using Macro.Utils;
 using Macro.Services;
 using System.Windows.Input;
+using System.Collections.ObjectModel;
+using System.Threading;
 
 namespace Macro.Models
 {
@@ -28,7 +30,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(VariableCompareCondition), typeDiscriminator: nameof(VariableCompareCondition))]
     public interface IMacroCondition : IReactiveObject
     {
-        Task<bool> CheckAsync();
+        Task<bool> CheckAsync(CancellationToken token = default);
         System.Windows.Point? FoundPoint { get; }
         string FailJumpName { get; set; }
         string FailJumpId { get; set; }
@@ -42,7 +44,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(WindowControlAction), typeDiscriminator: nameof(WindowControlAction))]
     public interface IMacroAction : IReactiveObject
     {
-        Task ExecuteAsync(System.Windows.Point? conditionPoint = null);
+        Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null);
         string FailJumpName { get; set; }
         string FailJumpId { get; set; }
     }
@@ -85,9 +87,9 @@ namespace Macro.Models
 
         private string _failJumpId = string.Empty;
 
-        public async Task<bool> CheckAsync()
+        public async Task<bool> CheckAsync(CancellationToken token = default)
         {
-            await Task.Delay(DelayTimeMs);
+            await Task.Delay(DelayTimeMs, token);
             return true;
         }
     }
@@ -208,13 +210,15 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _testResult, value);
         }
 
-        public async Task<bool> CheckAsync()
+        public async Task<bool> CheckAsync(CancellationToken token = default)
         {
             _foundPoint = null;
             return await Task.Run(() =>
             {
                 try
                 {
+                    if (token.IsCancellationRequested) return false;
+
                     // 1. 현재 화면 캡처
                     var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
                     {
@@ -237,6 +241,8 @@ namespace Macro.Models
                         double rh = RegionH * _scaleY;
                         roi = new System.Windows.Rect(rx, ry, rw, rh);
                     }
+                    
+                    if (token.IsCancellationRequested) return false;
 
                     // 2. 이미지 서치
                     var result = ImageSearchService.FindImage(capture, ImagePath, Threshold, roi);
@@ -259,7 +265,7 @@ namespace Macro.Models
                 {
                     return false;
                 }
-            });
+            }, token);
         }
     }
 
@@ -342,17 +348,19 @@ namespace Macro.Models
 
         public System.Windows.Point? FoundPoint => null;
 
-        public async Task<bool> CheckAsync()
+        public async Task<bool> CheckAsync(CancellationToken token = default)
         {
             if (DelayMs > 0)
             {
-                await Task.Delay(DelayMs);
+                await Task.Delay(DelayMs, token);
             }
 
             return await Task.Run(() =>
             {
                 try
                 {
+                    if (token.IsCancellationRequested) return false;
+
                     var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
                     if (capture == null) return false;
 
@@ -376,7 +384,7 @@ namespace Macro.Models
                 {
                     return false;
                 }
-            });
+            }, token);
         }
     }
 
@@ -421,10 +429,12 @@ namespace Macro.Models
 
         public System.Windows.Point? FoundPoint => null;
 
-        public async Task<bool> CheckAsync()
+        public async Task<bool> CheckAsync(CancellationToken token = default)
         {
             return await Task.Run(() =>
             {
+                if (token.IsCancellationRequested) return false;
+
                 var vars = MacroEngineService.Instance.Variables;
                 string currentValue = vars.ContainsKey(VariableName) ? vars[VariableName] : string.Empty;
 
@@ -447,7 +457,7 @@ namespace Macro.Models
                         return false;
                     default: return false;
                 }
-            });
+            }, token);
         }
     }
 
@@ -515,11 +525,13 @@ namespace Macro.Models
 
         private string _failJumpId = string.Empty;
 
-        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
             // 백그라운드 스레드에서 UI 차단 없이 실행
             await Task.Run(() =>
             {
+                if (token.IsCancellationRequested) return;
+
                 int finalX = 0;
                 int finalY = 0;
 
@@ -533,9 +545,10 @@ namespace Macro.Models
                     finalX = (int)(X * _scaleX + _offsetX);
                     finalY = (int)(Y * _scaleY + _offsetY);
                 }
-
-                InputHelper.MoveAndClick(finalX, finalY, ClickType);
-            });
+                
+                if (!token.IsCancellationRequested)
+                    InputHelper.MoveAndClick(finalX, finalY, ClickType);
+            }, token);
         }
     }
 
@@ -564,10 +577,12 @@ namespace Macro.Models
 
         private string _failJumpId = string.Empty;
 
-        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
             await Task.Run(() =>
             {
+                if (token.IsCancellationRequested) return;
+                
                 if (string.IsNullOrEmpty(KeyCode)) return;
 
                 try
@@ -579,7 +594,7 @@ namespace Macro.Models
                         // Key를 Windows Virtual Key Code로 변환
                         int vKey = KeyInterop.VirtualKeyFromKey(key);
                         
-                        if (vKey > 0)
+                        if (vKey > 0 && !token.IsCancellationRequested)
                         {
                             InputHelper.PressKey((byte)vKey);
                         }
@@ -593,7 +608,7 @@ namespace Macro.Models
                 {
                     // 변환 실패 무시
                 }
-            });
+            }, token);
         }
     }
 
@@ -636,10 +651,12 @@ namespace Macro.Models
 
         private string _failJumpId = string.Empty;
 
-        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
             await Task.Run(() =>
             {
+                if (token.IsCancellationRequested) return;
+
                 var vars = MacroEngineService.Instance.Variables;
                 if (string.IsNullOrEmpty(VariableName)) return;
 
@@ -657,7 +674,7 @@ namespace Macro.Models
                     if (Operation == "Add") vars[VariableName] = (current + val).ToString();
                     else vars[VariableName] = (current - val).ToString();
                 }
-            });
+            }, token);
         }
     }
 
@@ -686,11 +703,11 @@ namespace Macro.Models
 
         private string _failJumpId = string.Empty;
 
-        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
             if (DelayTimeMs > 0)
             {
-                await Task.Delay(DelayTimeMs);
+                await Task.Delay(DelayTimeMs, token);
             }
         }
     }
@@ -746,10 +763,12 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
         }
 
-        public async Task ExecuteAsync(System.Windows.Point? conditionPoint = null)
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
             await Task.Run(() =>
             {
+                if (token.IsCancellationRequested) return;
+
                 if (string.IsNullOrEmpty(TargetName))
                     throw new Exception("Target name (Process or Title) is empty.");
 
@@ -795,13 +814,16 @@ namespace Macro.Models
                         break;
                 }
 
-                InputHelper.ShowWindow(hWnd, nCmdShow);
-                
-                if (WindowState != WindowControlState.Minimize)
+                if (!token.IsCancellationRequested)
                 {
-                    InputHelper.SetForegroundWindow(hWnd);
+                    InputHelper.ShowWindow(hWnd, nCmdShow);
+                    
+                    if (WindowState != WindowControlState.Minimize)
+                    {
+                        InputHelper.SetForegroundWindow(hWnd);
+                    }
                 }
-            });
+            }, token);
         }
     }
 
@@ -843,13 +865,13 @@ namespace Macro.Models
 
         // JSON Deserialization을 위한 기본 생성자 (필요 시)
         [JsonConstructor]
-        public SequenceItem(Guid id, string name, bool isEnabled, IMacroCondition? preCondition, IMacroAction action, IMacroCondition? postCondition, int retryCount = 0, int retryDelayMs = 500, int repeatCount = 1, string successJumpName = "", string successJumpId = "")
+        public SequenceItem(Guid id, string name, bool isEnabled, IMacroCondition? preCondition, IMacroAction? action, IMacroCondition? postCondition, int retryCount = 0, int retryDelayMs = 500, int repeatCount = 1, string successJumpName = "", string successJumpId = "")
         {
              _id = id == Guid.Empty ? Guid.NewGuid() : id;
              _name = name;
              _isEnabled = isEnabled;
              _preCondition = preCondition;
-             _action = action ?? throw new ArgumentNullException(nameof(action));
+             _action = action ?? new IdleAction();
              _postCondition = postCondition;
              _retryCount = retryCount;
              _retryDelayMs = retryDelayMs;
@@ -967,11 +989,90 @@ namespace Macro.Models
             get => _successJumpId;
             set => this.RaiseAndSetIfChanged(ref _successJumpId, value);
         }
-// ... (Pre/Post Condition 속성들에 대해서도 동일하게 FailJumpId 적용 필요)
 
         public void ResetId()
         {
             _id = Guid.NewGuid();
+        }
+    }
+
+    public class SequenceGroup : ReactiveObject
+    {
+        private string _name = "Group";
+        private ObservableCollection<SequenceItem> _items = new ObservableCollection<SequenceItem>();
+
+        // Shared Context Fields
+        private CoordinateMode _coordinateMode = CoordinateMode.Global;
+        private WindowControlSearchMethod _contextSearchMethod = WindowControlSearchMethod.ProcessName;
+        private WindowControlState _contextWindowState = WindowControlState.Maximize;
+        private string _targetProcessName = string.Empty;
+        private string _processNotFoundJumpName = string.Empty;
+        private string _processNotFoundJumpId = string.Empty;
+        private int _refWindowWidth = 1920;
+        private int _refWindowHeight = 1080;
+
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public ObservableCollection<SequenceItem> Items
+        {
+            get => _items;
+            set => this.RaiseAndSetIfChanged(ref _items, value);
+        }
+
+        public CoordinateMode CoordinateMode
+        {
+            get => _coordinateMode;
+            set => this.RaiseAndSetIfChanged(ref _coordinateMode, value);
+        }
+
+        public WindowControlSearchMethod ContextSearchMethod
+        {
+            get => _contextSearchMethod;
+            set => this.RaiseAndSetIfChanged(ref _contextSearchMethod, value);
+        }
+
+        public WindowControlState ContextWindowState
+        {
+            get => _contextWindowState;
+            set => this.RaiseAndSetIfChanged(ref _contextWindowState, value);
+        }
+
+        public string TargetProcessName
+        {
+            get => _targetProcessName;
+            set => this.RaiseAndSetIfChanged(ref _targetProcessName, value);
+        }
+
+        public string ProcessNotFoundJumpName
+        {
+            get => _processNotFoundJumpName;
+            set => this.RaiseAndSetIfChanged(ref _processNotFoundJumpName, value);
+        }
+
+        public string ProcessNotFoundJumpId
+        {
+            get => _processNotFoundJumpId;
+            set => this.RaiseAndSetIfChanged(ref _processNotFoundJumpId, value);
+        }
+
+        public int RefWindowWidth
+        {
+            get => _refWindowWidth;
+            set => this.RaiseAndSetIfChanged(ref _refWindowWidth, value);
+        }
+
+        public int RefWindowHeight
+        {
+            get => _refWindowHeight;
+            set => this.RaiseAndSetIfChanged(ref _refWindowHeight, value);
+        }
+
+        public SequenceGroup()
+        {
         }
     }
 

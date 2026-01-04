@@ -163,7 +163,7 @@ namespace Macro.Services
                                                             if (item.PreCondition != null)
                                                             {
                                                                 AddLog($"    - 조건 확인 중: {GetTypeName(item.PreCondition)} (시도 {retryAttempt + 1})");
-                                                                bool check = await item.PreCondition.CheckAsync();
+                                                                bool check = await item.PreCondition.CheckAsync(token);
                                                                 if (!check)
                                                                 {
                                                                     throw new ComponentFailureException($"PreCondition 실패: {item.Name}", item.PreCondition.FailJumpName, item.PreCondition.FailJumpId);
@@ -193,7 +193,7 @@ namespace Macro.Services
                                                             AddLog($"    - 동작 실행 중: {GetTypeName(item.Action)}");
                                                             try
                                                             {
-                                                                await item.Action.ExecuteAsync(foundPoint);
+                                                                await item.Action.ExecuteAsync(token, foundPoint);
                                                             }
                                                             catch (Exception ex)
                                                             {
@@ -205,7 +205,7 @@ namespace Macro.Services
                                                             {
                                                                 if (token.IsCancellationRequested) break;
                                                                 AddLog($"    - 결과 확인 중: {GetTypeName(item.PostCondition)}");
-                                                                bool check = await item.PostCondition.CheckAsync();
+                                                                bool check = await item.PostCondition.CheckAsync(token);
                                                                 if (!check)
                                                                 {
                                                                     throw new ComponentFailureException($"PostCondition 실패: {item.Name}", item.PostCondition.FailJumpName, item.PostCondition.FailJumpId);
@@ -376,7 +376,7 @@ namespace Macro.Services
                     if (item.PreCondition != null)
                     {
                         AddLog($"  - 조건 확인: {GetTypeName(item.PreCondition)}");
-                        bool check = await item.PreCondition.CheckAsync();
+                        bool check = await item.PreCondition.CheckAsync(CancellationToken.None);
                         if (check)
                         {
                             foundPoint = item.PreCondition.FoundPoint;
@@ -398,50 +398,21 @@ namespace Macro.Services
                 
                         if (preCapture != null)
                         {
-                            int tx = gcc.X; 
-                            int ty = gcc.Y;
-                            int tw = gcc.Width; 
-                            int th = gcc.Height;
-
-                            // 이미 ConfigureRelativeCoordinates에서 gcc의 좌표가 변환되었을 수 있음.
-                            // 하지만 GetGrayAverage 호출 시 내부적으로는 좌표만 받음.
-                            // 만약 ConfigureRelativeCoordinates가 gcc의 X,Y 프로퍼티를 바꾼다면? -> 아니다. SetTransform으로 내부 offset만 바꾼다.
-                            // GrayChangeCondition.CheckAsync는 내부적으로 변환된 좌표를 쓴다.
-                            // 하지만 여기서 ReferenceValue를 구할 때는 ImageSearchService.GetGrayAverage를 직접 호출한다.
-                            // 따라서 여기서도 변환된 좌표를 써야 한다.
-                            
-                            // gcc는 ISupportCoordinateTransform을 구현함.
-                            // 하지만 외부에서 변환된 좌표(offset applied)를 알 방법이 없다 (private fields).
-                            // ConfigureRelativeCoordinates는 gcc.SetTransform(...)을 호출하여 내부 state를 세팅함.
-                            // CheckAsync()는 그 state를 사용함.
-                            
-                            // 문제: 여기서 GetGrayAverage를 호출할 때 좌표를 어떻게 변환할 것인가?
-                            // 해결: GrayChangeCondition에 `MeasureReferenceValue()` 메서드를 추가하여 캡슐화하는 것이 맞음.
-                            // 하지만 지금 모델을 또 수정하기 번거로우니, CheckAsync 로직을 흉내내거나
-                            // 일단 GrayChangeCondition은 놔두고 (빈번하지 않음), 기본 Action 실행에 집중.
-                            
-                            // *중요*: GrayChangeCondition은 CheckAsync 내에서만 변환 좌표를 씀.
-                            // ReferenceValue 세팅은 여기서 직접 좌표를 계산해서 넣어야 함.
-                            // 하지만 ConfigureRelativeCoordinates 로직이 복잡함 (Window 찾기 등).
-                            // 이미 위에서 ConfigureRelativeCoordinates(item)을 호출했으므로,
-                            // gcc 내부에는 Scale/Offset이 세팅되어 있음.
-                            // gcc에 `GetTransformedRect()` 같은 메서드가 있다면 좋겠지만 없음.
-                            
-                            // 임시 방편: 일단 원본 좌표로 동작 (오차 감수) 혹은 TODO
-                            // 사용자 요청은 "Action 실행"이 주 목적이므로 이 부분은 스킵해도 무방.
-                            // gcc.ReferenceValue = ImageSearchService.GetGrayAverage(preCapture, gcc.X, gcc.Y, gcc.Width, gcc.Height);
+                            // GrayChangeCondition ReferenceValue 측정
+                            // 단일 실행에서는 단순히 현재 값을 ReferenceValue로 설정하는 정도
+                            gcc.ReferenceValue = ImageSearchService.GetGrayAverage(preCapture, gcc.X, gcc.Y, gcc.Width, gcc.Height);
                         }
                     }
 
                     // 4. Action
                     AddLog($"  - 동작 실행: {GetTypeName(item.Action)}");
-                    await item.Action.ExecuteAsync(foundPoint);
+                    await item.Action.ExecuteAsync(CancellationToken.None, foundPoint);
 
                     // 5. PostCondition
                     if (item.PostCondition != null)
                     {
                         AddLog($"  - 결과 확인: {GetTypeName(item.PostCondition)}");
-                        bool check = await item.PostCondition.CheckAsync();
+                        bool check = await item.PostCondition.CheckAsync(CancellationToken.None);
                         AddLog(check ? "  -> 결과 성공" : "  -> 결과 실패");
                     }
                 });

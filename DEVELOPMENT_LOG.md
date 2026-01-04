@@ -135,14 +135,29 @@
 - **Visual Test Feedback**: [Test Match] 실행 시 캡처된 화면 위에 ROI(파란색)와 찾은 위치(빨간색 박스)를 그려서 표시. 마커 크기 또한 현재 창의 스케일에 맞춰 유동적으로 변화하도록 구현.
 - **Engine Integration**: 티칭 화면의 개별 스텝 재생(▶) 버튼 클릭 시에도 엔진의 좌표 보정 로직(`ConfigureRelativeCoordinates`)을 거치도록 개선하여 실행 결과의 일관성 확보.
 
-5. **Fatal User Callback Exception (0xc000041d)**
-    - 증상: 매크로 실행 중 `TargetInvocationException`과 함께 프로그램이 즉시 종료됨.
-    - 원인: 
-        1) 백그라운드 스레드에서 업데이트된 엔진 속성이 UI 마샬링 없이 바인딩에 전달됨.
-        2) View 활성화 시 `ViewModel` 할당 및 `DataContext` 설정 과정이 비동기적으로 발생하며 UI 스레드 위반 발생.
-    - 해결: 
-        1) `DashboardViewModel`의 속성 헬퍼에 `ObserveOn(RxApp.MainThreadScheduler)` 추가.
-        2) 모든 View(`DashboardView`, `RecipeView`, `TeachingView`)의 `WhenActivated` 내 `BindTo` 호출 전에 `ObserveOn(RxApp.MainThreadScheduler)`을 추가하여 UI 요소 접근 안정성 보장.
+### 3.19. 레시피 계층 구조(Group) 도입 및 UI 고도화 (2026-01-04)
+- **SequenceGroup 모델**: 
+    - 각 스텝별로 설정하던 '대상 윈도우(Context)' 설정을 그룹 레벨로 격상하여 공통 관리.
+    - `CoordinateMode`, `TargetProcessName`, `WindowState` 등을 그룹에서 일괄 설정하여 유지보수성 향상.
+- **TreeView 기반 티칭 에디터**: 
+    - 좌측 목록을 `TreeView`로 개편하여 [그룹 > 스텝] 계층 구조 시각화.
+    - 선택 항목에 따라 그룹 설정 패널과 스텝 상세 설정 패널이 동적으로 전환되는 UX 구현.
+- **실행 엔진 평탄화(Flattening)**: 
+    - 엔진의 핵심 로직 수정을 최소화하기 위해, 실행 시점에 계층 구조를 단일 리스트로 변환.
+    - 그룹 설정을 하위 스텝에 자동 주입하고, 이름을 `그룹명_스텝명`으로 자동 변경하여 로그 가독성 확보.
+- **하위 호환성(Migration)**: 레거시 평탄 리스트 형식의 JSON 로드 시 'Default Group'으로 자동 마이그레이션 처리.
+
+### 3.20. 흐름 제어(Jump) 안정화 및 예외 처리 (2026-01-04)
+- **ID 기반 점프 시스템**: 
+    - 점프 대상을 '이름'이 아닌 '고유 ID(Guid)'로 관리하도록 변경.
+    - 스텝 이름을 변경하더라도 흐름 제어 연결이 유지되도록 개선.
+- **계층적 점프 타겟 UI**: 
+    - 흐름 제어 콤보박스에 `JumpTargetViewModel` 도입.
+    - 그룹(📁, 볼드)과 스텝(📄, 들여쓰기)을 구분하여 표시함으로써 직관적인 점프 대상 선택 지원.
+- **바인딩 안정화(State Management)**: 
+    - `_isLoading` 플래그를 도입하여 데이터 로드 중 콤보박스 리스트가 초기화되는 문제 방지.
+    - 노드 간 이동 시 선택된 점프 타겟 값이 소실되지 않도록 목록 갱신 타이밍 최적화.
+- **Fail-safe 생성자**: JSON 로드 중 Action 데이터가 누락된 경우 `null` 대신 `IdleAction`으로 자동 복구하여 앱 크래시(ArgumentNullException) 방지.
 
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)

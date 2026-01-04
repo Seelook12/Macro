@@ -101,8 +101,8 @@ namespace Macro.ViewModels
                     return;
                 }
 
-                // 3. 파일 로드 및 파싱
-                List<SequenceItem>? sequences = null;
+                // 3. 파일 로드 및 파싱 (그룹 지원)
+                List<SequenceItem> finalSequence = new List<SequenceItem>();
                 try
                 {
                     var json = await File.ReadAllTextAsync(currentRecipe.FilePath);
@@ -112,22 +112,71 @@ namespace Macro.ViewModels
                         return;
                     }
 
-                    sequences = JsonSerializer.Deserialize<List<SequenceItem>>(json, new JsonSerializerOptions
+                    var options = new JsonSerializerOptions
                     {
                         WriteIndented = true,
                         PropertyNameCaseInsensitive = true
-                    });
+                    };
+
+                    try
+                    {
+                        // A. Try Loading as Group List (New Format)
+                        var loadedGroups = JsonSerializer.Deserialize<List<SequenceGroup>>(json, options);
+                        
+                        // Check if it's really a group list (check first item)
+                        if (loadedGroups != null && loadedGroups.Count > 0 && loadedGroups[0].Items != null)
+                        {
+                            foreach (var group in loadedGroups)
+                            {
+                                if (!group.Items.Any()) continue;
+
+                                foreach (var item in group.Items)
+                                {
+                                    // Deep Clone Item (to avoid modifying original data if we were using shared memory, though here we just loaded from file)
+                                    // We can just use the item directly since we just loaded it, but we need to inject properties.
+                                    
+                                    // 1. Name Injection
+                                    item.Name = $"{group.Name}_{item.Name}";
+
+                                    // 2. Context Injection
+                                    item.CoordinateMode = group.CoordinateMode;
+                                    item.ContextSearchMethod = group.ContextSearchMethod;
+                                    item.TargetProcessName = group.TargetProcessName;
+                                    item.ContextWindowState = group.ContextWindowState;
+                                    item.ProcessNotFoundJumpName = group.ProcessNotFoundJumpName;
+                                    item.ProcessNotFoundJumpId = group.ProcessNotFoundJumpId;
+                                    item.RefWindowWidth = group.RefWindowWidth;
+                                    item.RefWindowHeight = group.RefWindowHeight;
+
+                                    finalSequence.Add(item);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            throw new Exception("Not a group list");
+                        }
+                    }
+                    catch
+                    {
+                        // B. Fallback: Try Loading as Flat List (Legacy Format)
+                        var loadedItems = JsonSerializer.Deserialize<List<SequenceItem>>(json, options);
+                        if (loadedItems != null)
+                        {
+                            finalSequence.AddRange(loadedItems);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"레시피 로드 중 오류가 발생했습니다.\n{{ex.Message}}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Windows.MessageBox.Show($"레시피 로드 중 오류가 발생했습니다.\n{ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 // 4. 실행
-                if (sequences != null && sequences.Count > 0)
+                if (finalSequence.Count > 0)
                 {
-                    await _engineService.RunAsync(sequences);
+                    await _engineService.RunAsync(finalSequence);
                 }
                 else
                 {

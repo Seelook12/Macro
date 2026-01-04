@@ -200,5 +200,29 @@ namespace Macro.Views
         }
 
         #endregion
+
+        private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (ViewModel == null) return;
+
+            if (e.NewValue is SequenceGroup group)
+            {
+                ViewModel.SelectedGroup = group;
+                ViewModel.SelectedSequence = null;
+            }
+            else if (e.NewValue is SequenceItem item)
+            {
+                ViewModel.SelectedSequence = item;
+                // Find parent group
+                foreach (var g in ViewModel.Groups)
+                {
+                    if (g.Items.Contains(item))
+                    {
+                        ViewModel.SelectedGroup = g;
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

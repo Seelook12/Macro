@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using Macro.Models;
 using Macro.Services;
 using Macro.Utils;
+using OpenCvSharp;
+using OpenCvSharp.WpfExtensions;
 using ReactiveUI;
 
 namespace Macro.ViewModels
@@ -40,6 +42,7 @@ namespace Macro.ViewModels
 
         public ObservableCollection<string> SequenceNames => _sequenceNames;
         public ObservableCollection<string> TargetList { get; } = new ObservableCollection<string>();
+        public ObservableCollection<string> ProcessList { get; } = new ObservableCollection<string>(); // New Collection
         public List<WindowControlState> WindowControlStates { get; } = new List<WindowControlState>
         {
             WindowControlState.Restore,
@@ -50,6 +53,12 @@ namespace Macro.ViewModels
         {
             WindowControlSearchMethod.ProcessName,
             WindowControlSearchMethod.WindowTitle
+        };
+
+        public List<CoordinateMode> CoordinateModes { get; } = new List<CoordinateMode>
+        {
+            CoordinateMode.Global,
+            CoordinateMode.WindowRelative
         };
 
         public string CurrentRecipeName
@@ -98,6 +107,20 @@ namespace Macro.ViewModels
                     SelectedSequence.SuccessJumpName = value;
                     SelectedSequence.SuccessJumpId = GetJumpIdFromName(value);
                     this.RaisePropertyChanged(nameof(SuccessJumpTarget));
+                }
+            }
+        }
+
+        public string ProcessNotFoundJumpTarget
+        {
+            get => GetJumpNameFromId(SelectedSequence?.ProcessNotFoundJumpId, SelectedSequence?.ProcessNotFoundJumpName);
+            set
+            {
+                if (SelectedSequence != null)
+                {
+                    SelectedSequence.ProcessNotFoundJumpName = value;
+                    SelectedSequence.ProcessNotFoundJumpId = GetJumpIdFromName(value);
+                    this.RaisePropertyChanged(nameof(ProcessNotFoundJumpTarget));
                 }
             }
         }
@@ -168,6 +191,7 @@ namespace Macro.ViewModels
         public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; }
         public ReactiveCommand<object, Unit> PickRegionCommand { get; }
         public ReactiveCommand<WindowControlAction, Unit> RefreshTargetListCommand { get; }
+        public ReactiveCommand<SequenceItem, Unit> RefreshContextTargetCommand { get; } // Updated Command
 
         public ReactiveCommand<SequenceItem, Unit> MoveSequenceUpCommand { get; }
         public ReactiveCommand<SequenceItem, Unit> MoveSequenceDownCommand { get; }
@@ -175,6 +199,13 @@ namespace Macro.ViewModels
         public ReactiveCommand<Unit, Unit> PasteSequenceCommand { get; }
 
         private string _clipboardJson = string.Empty;
+
+        private System.Windows.Media.Imaging.BitmapSource? _testResultImage;
+        public System.Windows.Media.Imaging.BitmapSource? TestResultImage
+        {
+            get => _testResultImage;
+            set => this.RaiseAndSetIfChanged(ref _testResultImage, value);
+        }
 
         #endregion
 
@@ -236,6 +267,35 @@ namespace Macro.ViewModels
                 });
             });
 
+            // Context Target Refresh Command
+            RefreshContextTargetCommand = ReactiveCommand.CreateFromTask<SequenceItem>(async (item) =>
+            {
+                if (item == null) return;
+                
+                await Task.Run(() =>
+                {
+                    List<string> items = new List<string>();
+                    if (item.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
+                    {
+                        var processes = System.Diagnostics.Process.GetProcesses();
+                        items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
+                    }
+                    else
+                    {
+                        items = InputHelper.GetOpenWindows().Distinct().OrderBy(n => n).ToList();
+                    }
+
+                    RxApp.MainThreadScheduler.Schedule(() =>
+                    {
+                        ProcessList.Clear();
+                        foreach (var name in items)
+                        {
+                            ProcessList.Add(name);
+                        }
+                    });
+                });
+            });
+
             // 좌표 픽업 커맨드
             PickCoordinateCommand = ReactiveCommand.CreateFromTask(async () =>
             {
@@ -244,8 +304,26 @@ namespace Macro.ViewModels
                     var point = await GetCoordinateInteraction.Handle(Unit.Default);
                     if (point.HasValue)
                     {
-                        mouseAction.X = (int)point.Value.X;
-                        mouseAction.Y = (int)point.Value.Y;
+                        var p = point.Value;
+
+                        if (SelectedSequence.CoordinateMode == CoordinateMode.WindowRelative)
+                        {
+                            var winInfo = GetTargetWindowInfo(SelectedSequence);
+                            if (winInfo.HasValue)
+                            {
+                                // 자동 기준 해상도 설정
+                                SelectedSequence.RefWindowWidth = winInfo.Value.Width;
+                                SelectedSequence.RefWindowHeight = winInfo.Value.Height;
+
+                                // 상대 좌표 변환
+                                mouseAction.X = (int)(p.X - winInfo.Value.X);
+                                mouseAction.Y = (int)(p.Y - winInfo.Value.Y);
+                                return;
+                            }
+                        }
+
+                        mouseAction.X = (int)p.X;
+                        mouseAction.Y = (int)p.Y;
                     }
                 }
             }, this.WhenAnyValue(x => x.SelectedSequence, x => x.SelectedSequence!.Action, 
@@ -290,37 +368,117 @@ namespace Macro.ViewModels
                 try 
                 {
                     condition.TestResult = "Searching...";
+                    TestResultImage = null;
                     
-                    // 1. 화면 캡처
-                    var capture = ScreenCaptureHelper.GetScreenCapture();
-                    if (capture == null) 
+                    await Task.Run(() => 
                     {
-                        condition.TestResult = "Capture Failed";
-                        return;
-                    }
+                        var captureSource = ScreenCaptureHelper.GetScreenCapture();
+                        if (captureSource == null) 
+                        {
+                            condition.TestResult = "Capture Failed";
+                            return;
+                        }
 
-                    // 2. ROI 설정
-                    System.Windows.Rect? roi = null;
-                    if (condition.UseRegion && condition.RegionW > 0 && condition.RegionH > 0)
-                    {
-                        roi = new System.Windows.Rect(condition.RegionX, condition.RegionY, condition.RegionW, condition.RegionH);
-                    }
+                        // 1. 비율(Scale) 및 좌표 보정값 계산
+                        double scaleX = 1.0;
+                        double scaleY = 1.0;
+                        double winX = 0;
+                        double winY = 0;
 
-                    // 3. 이미지 검색 실행
-                    var result = await Task.Run(() => ImageSearchService.FindImageDetailed(capture, condition.ImagePath, condition.Threshold, roi));
+                        if (SelectedSequence != null && SelectedSequence.CoordinateMode == CoordinateMode.WindowRelative)
+                        {
+                            var winInfo = GetTargetWindowInfo(SelectedSequence);
+                            if (winInfo.HasValue)
+                            {
+                                if (SelectedSequence.RefWindowWidth > 0 && SelectedSequence.RefWindowHeight > 0)
+                                {
+                                    scaleX = (double)winInfo.Value.Width / SelectedSequence.RefWindowWidth;
+                                    scaleY = (double)winInfo.Value.Height / SelectedSequence.RefWindowHeight;
+                                }
+                                winX = winInfo.Value.X;
+                                winY = winInfo.Value.Y;
+                            }
+                        }
 
-                    // 4. 결과 업데이트
-                    condition.TestScore = result.Score;
-                    if (result.Point.HasValue)
-                    {
-                        condition.TestResult = $"Success ({result.Point.Value.X:F0}, {result.Point.Value.Y:F0})";
-                        MacroEngineService.Instance.AddLog($"[Test] 이미지 매칭 성공: 점수 {result.Score:P1}, 위치 ({result.Point.Value.X:F0}, {result.Point.Value.Y:F0})");
-                    }
-                    else
-                    {
-                        condition.TestResult = "Failed (Low Score)";
-                        MacroEngineService.Instance.AddLog($"[Test] 이미지 매칭 실패: 최고 점수 {result.Score:P1} (임계값 {condition.Threshold:P1})");
-                    }
+                        // 2. ROI 설정
+                        System.Windows.Rect? searchRoi = null;
+                        OpenCvSharp.Rect? drawRoi = null;
+
+                        if (condition.UseRegion && condition.RegionW > 0 && condition.RegionH > 0)
+                        {
+                            // (원래 상대좌표 * 비율) + 현재 창 시작점
+                            double rx = condition.RegionX * scaleX + winX;
+                            double ry = condition.RegionY * scaleY + winY;
+                            double rw = condition.RegionW * scaleX;
+                            double rh = condition.RegionH * scaleY;
+
+                            searchRoi = new System.Windows.Rect(rx, ry, rw, rh);
+                            drawRoi = new OpenCvSharp.Rect((int)rx, (int)ry, (int)rw, (int)rh);
+                        }
+                        
+                        var result = ImageSearchService.FindImageDetailed(captureSource, condition.ImagePath, condition.Threshold, searchRoi);
+
+                        condition.TestScore = result.Score;
+
+                        // 3. 그리기 (OpenCV Mat)
+                        using (var mat = BitmapSourceConverter.ToMat(captureSource))
+                        {
+                            if (drawRoi.HasValue)
+                            {
+                                Cv2.Rectangle(mat, drawRoi.Value, Scalar.Blue, 2);
+                                Cv2.PutText(mat, "ROI", new OpenCvSharp.Point(drawRoi.Value.X, drawRoi.Value.Y - 10), 
+                                    HersheyFonts.HersheySimplex, 0.5, Scalar.Blue, 1);
+                            }
+
+                            if (result.Point.HasValue)
+                            {
+                                condition.TestResult = $"Success ({result.Point.Value.X:F0}, {result.Point.Value.Y:F0})";
+                                
+                                int tW = 50, tH = 50;
+                                try 
+                                {
+                                    using (var tempMat = Cv2.ImRead(condition.ImagePath))
+                                    {
+                                        if (!tempMat.Empty())
+                                        {
+                                            tW = tempMat.Width;
+                                            tH = tempMat.Height;
+                                        }
+                                    }
+                                } catch {}
+
+                                // 마커 크기 스케일링 적용
+                                int scaledW = (int)(tW * scaleX);
+                                int scaledH = (int)(tH * scaleY);
+
+                                // 중심 -> 좌상단 변환 (스케일된 크기 기준)
+                                int matchX = (int)(result.Point.Value.X - scaledW / 2);
+                                int matchY = (int)(result.Point.Value.Y - scaledH / 2);
+                                var matchRect = new OpenCvSharp.Rect(matchX, matchY, scaledW, scaledH);
+
+                                Cv2.Rectangle(mat, matchRect, Scalar.Red, 3);
+                                Cv2.PutText(mat, $"Found {result.Score:P0}", new OpenCvSharp.Point(matchX, matchY - 10), 
+                                    HersheyFonts.HersheySimplex, 0.5, Scalar.Red, 1);
+                                
+                                int cx = (int)result.Point.Value.X;
+                                int cy = (int)result.Point.Value.Y;
+                                Cv2.Line(mat, cx - 10, cy, cx + 10, cy, Scalar.Red, 2);
+                                Cv2.Line(mat, cx, cy - 10, cx, cy + 10, Scalar.Red, 2);
+                            }
+                            else
+                            {
+                                condition.TestResult = "Failed (Low Score)";
+                            }
+
+                            var resultSource = BitmapSourceConverter.ToBitmapSource(mat);
+                            resultSource.Freeze();
+
+                            RxApp.MainThreadScheduler.Schedule(() =>
+                            {
+                                TestResultImage = resultSource;
+                            });
+                        }
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -332,24 +490,42 @@ namespace Macro.ViewModels
             // 영역 선택 커맨드 (범용)
             PickRegionCommand = ReactiveCommand.CreateFromTask<object>(async obj =>
             {
-                if (obj == null) return;
+                if (obj == null || SelectedSequence == null) return;
 
                 var rect = await GetRegionInteraction.Handle(Unit.Default);
                 if (rect.HasValue)
                 {
                     var r = rect.Value;
+                    double targetX = r.X;
+                    double targetY = r.Y;
+
+                    if (SelectedSequence.CoordinateMode == CoordinateMode.WindowRelative)
+                    {
+                        var winInfo = GetTargetWindowInfo(SelectedSequence);
+                        if (winInfo.HasValue)
+                        {
+                            // 자동 기준 해상도 설정
+                            SelectedSequence.RefWindowWidth = winInfo.Value.Width;
+                            SelectedSequence.RefWindowHeight = winInfo.Value.Height;
+
+                            // 상대 좌표 변환
+                            targetX -= winInfo.Value.X;
+                            targetY -= winInfo.Value.Y;
+                        }
+                    }
+
                     if (obj is ImageMatchCondition imgMatch)
                     {
                         imgMatch.UseRegion = true;
-                        imgMatch.RegionX = (int)r.X;
-                        imgMatch.RegionY = (int)r.Y;
+                        imgMatch.RegionX = (int)targetX;
+                        imgMatch.RegionY = (int)targetY;
                         imgMatch.RegionW = (int)r.Width;
                         imgMatch.RegionH = (int)r.Height;
                     }
                     else if (obj is GrayChangeCondition grayChange)
                     {
-                        grayChange.X = (int)r.X;
-                        grayChange.Y = (int)r.Y;
+                        grayChange.X = (int)targetX;
+                        grayChange.Y = (int)targetY;
                         grayChange.Width = (int)r.Width;
                         grayChange.Height = (int)r.Height;
                     }
@@ -367,6 +543,11 @@ namespace Macro.ViewModels
                         var d2 = seq.WhenAnyValue(x => x.SuccessJumpName)
                             .Subscribe(name => seq.SuccessJumpId = GetJumpIdFromName(name));
                         disposables.Add(d2);
+
+                        // ProcessNotFoundJumpName 감시
+                        var dP = seq.WhenAnyValue(x => x.ProcessNotFoundJumpName)
+                            .Subscribe(name => seq.ProcessNotFoundJumpId = GetJumpIdFromName(name));
+                        disposables.Add(dP);
 
                         // PreCondition FailJumpName 감시
                         var d3 = seq.WhenAnyValue(x => x.PreCondition)
@@ -438,20 +619,7 @@ namespace Macro.ViewModels
         private async Task RunSingleStepAsync(SequenceItem item)
         {
             if (item == null) return;
-            try
-            {
-                System.Windows.Point? foundPoint = null;
-                if (item.PreCondition != null)
-                {
-                    bool check = await item.PreCondition.CheckAsync();
-                    if (check) foundPoint = item.PreCondition.FoundPoint;
-                }
-                await item.Action.ExecuteAsync(foundPoint);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Single run failed: {ex.Message}");
-            }
+            await MacroEngineService.Instance.RunSingleStepAsync(item);
         }
 
         private void LoadData()
@@ -528,6 +696,7 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedActionType));
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
             this.RaisePropertyChanged(nameof(SuccessJumpTarget));
+            this.RaisePropertyChanged(nameof(ProcessNotFoundJumpTarget));
         }
 
         private string GetJumpNameFromId(string? id, string? fallbackName)
@@ -811,6 +980,34 @@ namespace Macro.ViewModels
             {
                 System.Diagnostics.Debug.WriteLine($"Paste failed: {ex.Message}");
             }
+        }
+
+        private (int X, int Y, int Width, int Height)? GetTargetWindowInfo(SequenceItem item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.TargetProcessName)) return null;
+
+            IntPtr hWnd = IntPtr.Zero;
+            if (item.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
+            {
+                var p = System.Diagnostics.Process.GetProcessesByName(item.TargetProcessName).FirstOrDefault(x => x.MainWindowHandle != IntPtr.Zero);
+                if (p != null) hWnd = p.MainWindowHandle;
+            }
+            else
+            {
+                hWnd = InputHelper.FindWindowByTitle(item.TargetProcessName);
+            }
+
+            if (hWnd != IntPtr.Zero)
+            {
+                if (InputHelper.GetClientRect(hWnd, out var clientRect))
+                {
+                    InputHelper.POINT pt = new InputHelper.POINT { X = 0, Y = 0 };
+                    InputHelper.ClientToScreen(hWnd, ref pt);
+
+                    return (pt.X, pt.Y, clientRect.Width, clientRect.Height);
+                }
+            }
+            return null;
         }
 
         #endregion

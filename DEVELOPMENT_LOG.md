@@ -124,6 +124,17 @@
   - **Smart Paste**: 복사 시 고유 ID 재생성 로직 적용으로 충돌 방지.
 - **Search Logic**: 실행 중인 프로세스 및 윈도우 타이틀 목록 자동 갱신 기능 추가.
 
+### 3.17. 윈도우 상대 좌표 시스템(Window Relative) 고도화 (2026-01-04)
+- **Step 0 Context**: 모든 스텝의 실행 전 단계로 '대상 윈도우 설정' 컨텍스트를 추가. 실행 시 자동으로 창을 찾고 설정된 상태(최대화 등)로 변경 후 좌표 계산 수행.
+- **Dynamic Scaling**: 티칭 당시의 창 크기와 실행 시점의 창 크기를 비교하여 이미지 검색 ROI 및 마우스 클릭 좌표를 비율(Scale)에 맞춰 자동으로 재계산.
+- **Process/Title Search**: 프로세스 이름뿐만 아니라 창 제목(Title)을 통한 대상 윈도우 검색 기능 통합.
+- **Fail-safe Jump**: 대상 프로세스나 윈도우를 찾지 못했을 경우 지정된 스텝으로 즉시 점프하는 `ProcessNotFoundJump` 로직 구현.
+
+### 3.18. 티칭 에디터 UX 개선 및 시각화 (2026-01-04)
+- **Auto-Capture Reference**: [좌표 픽업] 또는 [영역 선택] 시 대상 윈도우의 크기를 자동으로 감지하여 '기준 해상도'로 저장하고, 절대 좌표를 창 기준 상대 좌표로 자동 변환.
+- **Visual Test Feedback**: [Test Match] 실행 시 캡처된 화면 위에 ROI(파란색)와 찾은 위치(빨간색 박스)를 그려서 표시. 마커 크기 또한 현재 창의 스케일에 맞춰 유동적으로 변화하도록 구현.
+- **Engine Integration**: 티칭 화면의 개별 스텝 재생(▶) 버튼 클릭 시에도 엔진의 좌표 보정 로직(`ConfigureRelativeCoordinates`)을 거치도록 개선하여 실행 결과의 일관성 확보.
+
 5. **Fatal User Callback Exception (0xc000041d)**
     - 증상: 매크로 실행 중 `TargetInvocationException`과 함께 프로그램이 즉시 종료됨.
     - 원인: 

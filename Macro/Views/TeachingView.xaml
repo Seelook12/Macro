@@ -71,26 +71,44 @@
 
                 <!-- Test Section -->
                 <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                <TextBlock Text="Match Score: " FontWeight="Bold"/>
-                                <TextBlock Text="{Binding TestScore, StringFormat=P1}" Foreground="#1565C0" FontWeight="Bold"/>
+                    <StackPanel>
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                    <TextBlock Text="Match Score: " FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding TestScore, StringFormat=P1}" Foreground="#1565C0" FontWeight="Bold"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Result: " FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding TestResult}" Foreground="#0D47A1"/>
+                                </StackPanel>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Result: " FontWeight="Bold"/>
-                                <TextBlock Text="{Binding TestResult}" Foreground="#0D47A1"/>
-                            </StackPanel>
-                        </StackPanel>
-                        <Button Grid.Column="1" Content="🔍 Test Match" 
-                                Padding="10,5" Background="#2196F3" Foreground="White" FontWeight="Bold"
-                                Command="{Binding DataContext.TestImageConditionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding .}"/>
-                    </Grid>
+                            <Button Grid.Column="1" Content="🔍 Test Match" 
+                                    Padding="10,5" Background="#2196F3" Foreground="White" FontWeight="Bold"
+                                    Command="{Binding DataContext.TestImageConditionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding .}"/>
+                        </Grid>
+                        
+                        <!-- Test Result Image Preview -->
+                        <Border BorderBrush="#90CAF9" BorderThickness="1" Background="White" Margin="0,5,0,0">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.TestResultImage, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Image Source="{Binding DataContext.TestResultImage, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                   MaxHeight="400" Stretch="Uniform" ToolTip="Matching Result (Red: Found, Blue: ROI)"/>
+                        </Border>
+                    </StackPanel>
                 </Border>
 
                 <!-- ROI Settings -->
@@ -412,6 +430,8 @@
                     <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
                 </DockPanel>
 
+                <!-- Coordinate System Settings Removed -->
+
                 <UniformGrid Columns="3" Margin="0,0,0,20">
                     <DockPanel Margin="0,0,10,0">
                         <TextBlock Text="반복:" VerticalAlignment="Center" Margin="0,0,5,0" Width="50"/>
@@ -444,6 +464,71 @@
 
                 <StackPanel>
                     
+                    <!-- Step 0: Context -->
+                    <GroupBox Header="0. 대상 윈도우 설정 (Target Context)" Margin="0,0,0,15" Padding="10" BorderBrush="#9C27B0">
+                        <StackPanel>
+                            <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                                <TextBlock Text="좌표 모드:" VerticalAlignment="Center" Width="100"/>
+                                <ComboBox ItemsSource="{Binding DataContext.CoordinateModes, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                          SelectedItem="{Binding SelectedSequence.CoordinateMode}"/>
+                            </DockPanel>
+
+                            <StackPanel DataContext="{Binding SelectedSequence}">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CoordinateMode}" Value="WindowRelative">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="100"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding ContextSearchMethod}"/>
+                                </DockPanel>
+
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="100"/>
+                                    <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
+                                            Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding .}"
+                                            ToolTip="목록 새로고침"/>
+                                    <ComboBox IsEditable="True" 
+                                              ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              Text="{Binding TargetProcessName, UpdateSourceTrigger=PropertyChanged}"
+                                              ToolTip="Process Name or Window Title"/>
+                                </DockPanel>
+
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="창 상태:" VerticalAlignment="Center" Width="100"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.WindowControlStates, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding ContextWindowState}"/>
+                                </DockPanel>
+
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="미발견 시 이동:" VerticalAlignment="Center" Width="100" Foreground="#C62828"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.SequenceNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding DataContext.ProcessNotFoundJumpTarget, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                </DockPanel>
+
+                                <UniformGrid Columns="2" Margin="0,5,0,0">
+                                    <DockPanel Margin="0,0,10,0">
+                                        <TextBlock Text="기준 너비:" VerticalAlignment="Center" Width="70"/>
+                                        <TextBox Text="{Binding RefWindowWidth, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                    <DockPanel>
+                                        <TextBlock Text="기준 높이:" VerticalAlignment="Center" Width="70"/>
+                                        <TextBox Text="{Binding RefWindowHeight, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                </UniformGrid>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
                     <!-- Step 1: Pre-Condition -->
                     <GroupBox Header="1. 시작 조건 (Pre-Condition)" Margin="0,0,0,15" Padding="10">
                         <StackPanel>

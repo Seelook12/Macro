@@ -10,6 +10,17 @@ namespace Macro.Models
 {
     #region Interfaces
 
+    public enum CoordinateMode
+    {
+        Global,
+        WindowRelative
+    }
+
+    public interface ISupportCoordinateTransform
+    {
+        void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY);
+    }
+
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
     [JsonDerivedType(typeof(DelayCondition), typeDiscriminator: nameof(DelayCondition))]
     [JsonDerivedType(typeof(ImageMatchCondition), typeDiscriminator: nameof(ImageMatchCondition))]
@@ -81,13 +92,27 @@ namespace Macro.Models
         }
     }
 
-    public class ImageMatchCondition : ReactiveObject, IMacroCondition
+    public class ImageMatchCondition : ReactiveObject, IMacroCondition, ISupportCoordinateTransform
     {
         private string _imagePath = string.Empty;
         private double _threshold = 0.9;
         private string _failJumpName = string.Empty;
         private string _resultVariableName = string.Empty;
         
+        // Runtime Transform Properties
+        private double _scaleX = 1.0;
+        private double _scaleY = 1.0;
+        private int _offsetX = 0;
+        private int _offsetY = 0;
+
+        public void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY)
+        {
+            _scaleX = scaleX;
+            _scaleY = scaleY;
+            _offsetX = offsetX;
+            _offsetY = offsetY;
+        }
+
         // ROI Properties
         private bool _useRegion;
         private int _regionX;
@@ -206,7 +231,11 @@ namespace Macro.Models
                     System.Windows.Rect? roi = null;
                     if (UseRegion && RegionW > 0 && RegionH > 0)
                     {
-                        roi = new System.Windows.Rect(RegionX, RegionY, RegionW, RegionH);
+                        double rx = RegionX * _scaleX + _offsetX;
+                        double ry = RegionY * _scaleY + _offsetY;
+                        double rw = RegionW * _scaleX;
+                        double rh = RegionH * _scaleY;
+                        roi = new System.Windows.Rect(rx, ry, rw, rh);
                     }
 
                     // 2. 이미지 서치
@@ -234,7 +263,7 @@ namespace Macro.Models
         }
     }
 
-    public class GrayChangeCondition : ReactiveObject, IMacroCondition
+    public class GrayChangeCondition : ReactiveObject, IMacroCondition, ISupportCoordinateTransform
     {
         private int _x;
         private int _y;
@@ -243,6 +272,20 @@ namespace Macro.Models
         private double _threshold = 10.0;
         private int _delayMs = 100;
         private string _failJumpName = string.Empty;
+
+        // Runtime Transform Properties
+        private double _scaleX = 1.0;
+        private double _scaleY = 1.0;
+        private int _offsetX = 0;
+        private int _offsetY = 0;
+
+        public void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY)
+        {
+            _scaleX = scaleX;
+            _scaleY = scaleY;
+            _offsetX = offsetX;
+            _offsetY = offsetY;
+        }
 
         public int X
         {
@@ -313,7 +356,12 @@ namespace Macro.Models
                     var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
                     if (capture == null) return false;
 
-                    double currentValue = ImageSearchService.GetGrayAverage(capture, X, Y, Width, Height);
+                    int tx = (int)(X * _scaleX + _offsetX);
+                    int ty = (int)(Y * _scaleY + _offsetY);
+                    int tw = (int)(Width * _scaleX);
+                    int th = (int)(Height * _scaleY);
+
+                    double currentValue = ImageSearchService.GetGrayAverage(capture, tx, ty, tw, th);
 
 
                     if (ReferenceValue == null)
@@ -407,13 +455,27 @@ namespace Macro.Models
 
     #region Action Implementations
 
-    public class MouseClickAction : ReactiveObject, IMacroAction
+    public class MouseClickAction : ReactiveObject, IMacroAction, ISupportCoordinateTransform
     {
         private int _x;
         private int _y;
         private string _clickType = "Left"; // Left, Right, Double
         private bool _useConditionAddress;
         private string _failJumpName = string.Empty;
+
+        // Runtime Transform Properties
+        private double _scaleX = 1.0;
+        private double _scaleY = 1.0;
+        private int _offsetX = 0;
+        private int _offsetY = 0;
+
+        public void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY)
+        {
+            _scaleX = scaleX;
+            _scaleY = scaleY;
+            _offsetX = offsetX;
+            _offsetY = offsetY;
+        }
 
         public int X
         {
@@ -458,13 +520,18 @@ namespace Macro.Models
             // 백그라운드 스레드에서 UI 차단 없이 실행
             await Task.Run(() =>
             {
-                int finalX = X;
-                int finalY = Y;
+                int finalX = 0;
+                int finalY = 0;
 
                 if (UseConditionAddress && conditionPoint.HasValue)
                 {
                     finalX = (int)conditionPoint.Value.X;
                     finalY = (int)conditionPoint.Value.Y;
+                }
+                else
+                {
+                    finalX = (int)(X * _scaleX + _offsetX);
+                    finalY = (int)(Y * _scaleY + _offsetY);
                 }
 
                 InputHelper.MoveAndClick(finalX, finalY, ClickType);
@@ -754,6 +821,18 @@ namespace Macro.Models
         private int _retryCount = 0;
         private int _retryDelayMs = 500;
         private int _repeatCount = 1;
+        
+        // Coordinate Mode Fields
+        private CoordinateMode _coordinateMode = CoordinateMode.Global;
+        private WindowControlSearchMethod _contextSearchMethod = WindowControlSearchMethod.ProcessName;
+        private WindowControlState _contextWindowState = WindowControlState.Maximize;
+
+        private string _targetProcessName = string.Empty;
+        private string _processNotFoundJumpName = string.Empty;
+        private string _processNotFoundJumpId = string.Empty;
+        private int _refWindowWidth = 1920;
+        private int _refWindowHeight = 1080;
+
         private string _successJumpName = string.Empty;
         private string _successJumpId = string.Empty; // Guid string or special tag
 
@@ -827,6 +906,54 @@ namespace Macro.Models
         {
             get => _repeatCount;
             set => this.RaiseAndSetIfChanged(ref _repeatCount, value);
+        }
+
+        public CoordinateMode CoordinateMode
+        {
+            get => _coordinateMode;
+            set => this.RaiseAndSetIfChanged(ref _coordinateMode, value);
+        }
+
+        public WindowControlSearchMethod ContextSearchMethod
+        {
+            get => _contextSearchMethod;
+            set => this.RaiseAndSetIfChanged(ref _contextSearchMethod, value);
+        }
+
+        public WindowControlState ContextWindowState
+        {
+            get => _contextWindowState;
+            set => this.RaiseAndSetIfChanged(ref _contextWindowState, value);
+        }
+
+        public string TargetProcessName
+        {
+            get => _targetProcessName;
+            set => this.RaiseAndSetIfChanged(ref _targetProcessName, value);
+        }
+
+        public string ProcessNotFoundJumpName
+        {
+            get => _processNotFoundJumpName;
+            set => this.RaiseAndSetIfChanged(ref _processNotFoundJumpName, value);
+        }
+
+        public string ProcessNotFoundJumpId
+        {
+            get => _processNotFoundJumpId;
+            set => this.RaiseAndSetIfChanged(ref _processNotFoundJumpId, value);
+        }
+
+        public int RefWindowWidth
+        {
+            get => _refWindowWidth;
+            set => this.RaiseAndSetIfChanged(ref _refWindowWidth, value);
+        }
+
+        public int RefWindowHeight
+        {
+            get => _refWindowHeight;
+            set => this.RaiseAndSetIfChanged(ref _refWindowHeight, value);
         }
 
         public string SuccessJumpName

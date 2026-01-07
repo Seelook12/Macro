@@ -48,8 +48,9 @@
                 </ListBox>
 
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5">
-                    <Button Content="생성" Command="{Binding CreateCommand}" Width="80" Margin="5"/>
-                    <Button Content="삭제" Command="{Binding DeleteCommand}" Width="80" Margin="5"/>
+                    <Button Content="생성" Command="{Binding CreateCommand}" Width="60" Margin="3"/>
+                    <Button Content="복사" Command="{Binding DuplicateCommand}" Width="60" Margin="3"/>
+                    <Button Content="삭제" Command="{Binding DeleteCommand}" Width="60" Margin="3"/>
                 </StackPanel>
             </Grid>
         </GroupBox>

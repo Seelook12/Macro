@@ -15,9 +15,11 @@ namespace Macro.Utils
         private static readonly RecipeManager _instance = new RecipeManager();
         private RecipeItem? _currentRecipe;
         private List<SequenceItem> _loadedSequences = new List<SequenceItem>();
-        private readonly string _recipeDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Recipe");
+        private readonly string _recipeDir;
 
         public static RecipeManager Instance => _instance;
+
+        public string RecipeDir => _recipeDir;
 
         public RecipeItem? CurrentRecipe
         {
@@ -45,6 +47,7 @@ namespace Macro.Utils
 
         private RecipeManager() 
         {
+            _recipeDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Recipe"));
             InitializeLastRecipe();
         }
 
@@ -69,6 +72,20 @@ namespace Macro.Utils
                 }
             }
             catch { }
+        }
+
+        public void DuplicateRecipe(string sourceFilePath, string newName)
+        {
+            if (string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
+                throw new FileNotFoundException("Source recipe file not found.", sourceFilePath);
+
+            var destFileName = $"{newName}.json";
+            var destFilePath = Path.Combine(_recipeDir, destFileName);
+
+            if (File.Exists(destFilePath))
+                throw new IOException($"A recipe with the name '{newName}' already exists.");
+
+            File.Copy(sourceFilePath, destFilePath);
         }
 
         private void LoadSequenceData(string filePath)

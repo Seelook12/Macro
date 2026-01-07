@@ -36,6 +36,7 @@ namespace Macro.ViewModels
         #region Commands & Interactions
 
         public ReactiveCommand<Unit, Unit> CreateCommand { get; }
+        public ReactiveCommand<Unit, Unit> DuplicateCommand { get; }
         public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
         public ReactiveCommand<Unit, Unit> SelectCommand { get; }
 
@@ -57,13 +58,14 @@ namespace Macro.ViewModels
             CreateCommand = ReactiveCommand.CreateFromTask(CreateRecipeAsync);
             
             var canExecute = this.WhenAnyValue(x => x.SelectedRecipe).Select(x => x != null);
+            
+            DuplicateCommand = ReactiveCommand.CreateFromTask(DuplicateRecipeAsync, canExecute);
             DeleteCommand = ReactiveCommand.Create(DeleteRecipe, canExecute);
             // [Modified] 비동기 명령어로 변경
             SelectCommand = ReactiveCommand.CreateFromTask(SelectRecipeAsync, canExecute);
 
             // 경로 설정
-            _recipeDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "Recipe");
-            _recipeDirectory = Path.GetFullPath(_recipeDirectory);
+            _recipeDirectory = RecipeManager.Instance.RecipeDir;
 
             try
             {
@@ -162,6 +164,40 @@ namespace Macro.ViewModels
             catch (Exception)
             {
                 // 에러 처리 로직 (로그 등)
+            }
+        }
+
+        private async System.Threading.Tasks.Task DuplicateRecipeAsync()
+        {
+            if (SelectedRecipe == null) return;
+
+            // View에게 이름 입력 요청
+            var name = await ShowInputName.Handle(Unit.Default);
+
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+
+            try
+            {
+                RecipeManager.Instance.DuplicateRecipe(SelectedRecipe.FilePath, name);
+
+                var fileName = $"{name}.json";
+                var filePath = Path.Combine(_recipeDirectory, fileName);
+
+                // 리스트에 추가
+                var newItem = new RecipeItem
+                {
+                    FileName = name,
+                    FilePath = filePath
+                };
+                Recipes.Add(newItem);
+                
+                // 선택
+                SelectedRecipe = newItem;
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"레시피 복사 중 오류가 발생했습니다.\n{ex.Message}", "오류", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 

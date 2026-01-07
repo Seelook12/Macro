@@ -26,10 +26,11 @@ namespace Macro.ViewModels
         private SequenceItem? _selectedSequence;
         private string _currentRecipeName = "No Recipe Selected";
         private bool _isLoading;
+        private bool _isVariableManagerOpen; // Variable Manager Overlay Control
         
         // ComboBox Lists
-        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change", "Variable Compare" };
-        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press", "Variable Set", "Window Control" };
+        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change", "Variable Compare", "Switch Case" };
+        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press", "Variable Set", "Window Control", "Multi Action" };
 
         #endregion
 
@@ -40,6 +41,15 @@ namespace Macro.ViewModels
         public ViewModelActivator Activator { get; } = new ViewModelActivator();
 
         public ObservableCollection<SequenceGroup> Groups { get; } = new ObservableCollection<SequenceGroup>();
+        
+        // Defined Variables (Loaded from sidecar .vars.json)
+        public ObservableCollection<VariableDefinition> DefinedVariables { get; } = new ObservableCollection<VariableDefinition>();
+
+        public bool IsVariableManagerOpen
+        {
+            get => _isVariableManagerOpen;
+            set => this.RaiseAndSetIfChanged(ref _isVariableManagerOpen, value);
+        }
 
         public ObservableCollection<JumpTargetViewModel> JumpTargets { get; } = new ObservableCollection<JumpTargetViewModel>();
         public ObservableCollection<string> TargetList { get; } = new ObservableCollection<string>();
@@ -142,6 +152,26 @@ namespace Macro.ViewModels
         public ReactiveCommand<Unit, Unit> CopyGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> PasteGroupCommand { get; }
         public ReactiveCommand<Unit, Unit> DuplicateGroupCommand { get; }
+        
+        public ReactiveCommand<SwitchCaseCondition, Unit> AddSwitchCaseCommand { get; }
+        public ReactiveCommand<SwitchCaseItem, Unit> RemoveSwitchCaseCommand { get; }
+
+        // Variable Manager Commands
+        public ReactiveCommand<Unit, Unit> OpenVariableManagerCommand { get; }
+        public ReactiveCommand<Unit, Unit> CloseVariableManagerCommand { get; }
+        public ReactiveCommand<Unit, Unit> AddVariableDefinitionCommand { get; }
+        public ReactiveCommand<VariableDefinition, Unit> RemoveVariableDefinitionCommand { get; }
+
+        public ReactiveCommand<MultiAction, Unit> AddSubActionCommand { get; }
+        public ReactiveCommand<IMacroAction, Unit> RemoveSubActionCommand { get; }
+        
+        // Helper Property for SubAction Type Selection
+        private string _selectedSubActionType = "Mouse Click";
+        public string SelectedSubActionType
+        {
+            get => _selectedSubActionType;
+            set => this.RaiseAndSetIfChanged(ref _selectedSubActionType, value);
+        }
 
         private string _clipboardJson = string.Empty;
         private bool _clipboardIsGroup = false;
@@ -190,6 +220,71 @@ namespace Macro.ViewModels
             PasteGroupCommand = ReactiveCommand.Create(PasteGroup);
 
             DuplicateGroupCommand = ReactiveCommand.Create(DuplicateGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+
+            AddSwitchCaseCommand = ReactiveCommand.Create<SwitchCaseCondition>(cond => 
+            {
+                cond?.Cases.Add(new SwitchCaseItem { CaseValue = 0, JumpId = "" });
+            });
+
+            RemoveSwitchCaseCommand = ReactiveCommand.Create<SwitchCaseItem>(item => 
+            {
+                if (SelectedSequence?.PreCondition is SwitchCaseCondition pre && pre.Cases.Contains(item))
+                    pre.Cases.Remove(item);
+                else if (SelectedSequence?.PostCondition is SwitchCaseCondition post && post.Cases.Contains(item))
+                    post.Cases.Remove(item);
+            });
+
+            // Variable Manager Init
+            OpenVariableManagerCommand = ReactiveCommand.Create(() => { IsVariableManagerOpen = true; });
+            CloseVariableManagerCommand = ReactiveCommand.Create(() => { IsVariableManagerOpen = false; }); // Close triggers Save logic usually, handled in SaveCommand or explicit
+            
+            AddVariableDefinitionCommand = ReactiveCommand.Create(() => 
+            {
+                DefinedVariables.Add(new VariableDefinition { Name = "NewVar", DefaultValue = "0", Description = "Description" });
+            });
+
+            RemoveVariableDefinitionCommand = ReactiveCommand.Create<VariableDefinition>(v => 
+            {
+                DefinedVariables.Remove(v);
+            });
+
+            AddSubActionCommand = ReactiveCommand.Create<MultiAction>(parent => 
+            {
+                if (parent == null) return;
+                
+                IMacroAction newAction = SelectedSubActionType switch
+                {
+                    "Idle" => new IdleAction(),
+                    "Mouse Click" => new MouseClickAction(),
+                    "Key Press" => new KeyPressAction(),
+                    "Variable Set" => new VariableSetAction(),
+                    "Window Control" => new WindowControlAction(),
+                    // Prevent infinite recursion by default logic or let user decide? Let's allow but it's weird.
+                    "Multi Action" => new MultiAction(), 
+                    _ => new IdleAction()
+                };
+                
+                // Initialize Window Control Action List if needed
+                if (newAction is WindowControlAction winAct)
+                {
+                    RefreshTargetListCommand.Execute(winAct).Subscribe();
+                }
+
+                parent.Actions.Add(newAction);
+            });
+
+            RemoveSubActionCommand = ReactiveCommand.Create<IMacroAction>(child => 
+            {
+                if (SelectedSequence?.Action is MultiAction parent)
+                {
+                    if (parent.Actions.Contains(child))
+                    {
+                        parent.Actions.Remove(child);
+                    }
+                }
+                // Handle nested MultiActions if necessary (complex)
+                // For now, assume single level or selected context
+            });
 
 
 
@@ -614,6 +709,8 @@ namespace Macro.ViewModels
                 {
                     System.Diagnostics.Debug.WriteLine($"Failed to load recipe: {ex.Message}");
                 }
+                
+                LoadVariables();
             }
             finally
             {
@@ -635,11 +732,50 @@ namespace Macro.ViewModels
                 // Save as Group List
                 var json = JsonSerializer.Serialize(Groups, GetJsonOptions());
                 await File.WriteAllTextAsync(currentRecipe.FilePath, json);
+                
+                // Save Variables Sidecar
+                SaveVariables();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to save recipe: {ex.Message}");
             }
+        }
+
+        private void LoadVariables()
+        {
+            DefinedVariables.Clear();
+            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+            if (currentRecipe == null) return;
+
+            var varsPath = Path.ChangeExtension(currentRecipe.FilePath, ".vars.json");
+            if (File.Exists(varsPath))
+            {
+                try
+                {
+                    var json = File.ReadAllText(varsPath);
+                    var vars = JsonSerializer.Deserialize<List<VariableDefinition>>(json, GetJsonOptions());
+                    if (vars != null)
+                    {
+                        foreach (var v in vars) DefinedVariables.Add(v);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private void SaveVariables()
+        {
+            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+            if (currentRecipe == null) return;
+
+            var varsPath = Path.ChangeExtension(currentRecipe.FilePath, ".vars.json");
+            try
+            {
+                var json = JsonSerializer.Serialize(DefinedVariables, GetJsonOptions());
+                File.WriteAllText(varsPath, json);
+            }
+            catch { }
         }
 
         private JsonSerializerOptions GetJsonOptions()
@@ -688,6 +824,7 @@ namespace Macro.ViewModels
                 KeyPressAction => "Key Press",
                 VariableSetAction => "Variable Set",
                 WindowControlAction => "Window Control",
+                MultiAction => "Multi Action",
                 _ => "Idle" // Default
             };
         }
@@ -702,6 +839,7 @@ namespace Macro.ViewModels
                 "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
                 "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
                 "Variable Compare" => new VariableCompareCondition(),
+                "Switch Case" => new SwitchCaseCondition(),
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
@@ -717,6 +855,7 @@ namespace Macro.ViewModels
                 "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
                 "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
                 "Variable Compare" => new VariableCompareCondition(),
+                "Switch Case" => new SwitchCaseCondition(),
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
@@ -748,6 +887,10 @@ namespace Macro.ViewModels
                 SelectedSequence.Action = action;
                 // 창 제어 액션을 처음 선택했을 때 목록을 한번 갱신해주면 사용자 경험이 좋음
                 RefreshTargetListCommand.Execute(action).Subscribe();
+            }
+            else if (type == "Multi Action" && !(SelectedSequence.Action is MultiAction))
+            {
+                SelectedSequence.Action = new MultiAction();
             }
             this.RaisePropertyChanged(nameof(SelectedActionType));
         }

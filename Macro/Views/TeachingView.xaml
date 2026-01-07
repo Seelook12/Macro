@@ -239,6 +239,111 @@
             </StackPanel>
         </DataTemplate>
 
+        <!-- 4. VariableCompareCondition -->
+        <DataTemplate DataType="{x:Type models:VariableCompareCondition}">
+            <StackPanel Margin="5">
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox IsEditable="True" 
+                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="Name"
+                              SelectedValuePath="Name"
+                              Text="{Binding VariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                </DockPanel>
+                
+                <Grid Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="비교 연산:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox Grid.Column="1" SelectedValue="{Binding Operator}" SelectedValuePath="Content">
+                        <ComboBoxItem Content="=="/>
+                        <ComboBoxItem Content="!="/>
+                        <ComboBoxItem Content="&gt;"/>
+                        <ComboBoxItem Content="&lt;"/>
+                        <ComboBoxItem Content="&gt;="/>
+                        <ComboBoxItem Content="&lt;="/>
+                        <ComboBoxItem Content="Contains"/>
+                    </ComboBox>
+                </Grid>
+
+                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                    <TextBlock Text="비교값:" VerticalAlignment="Center" Width="70"/>
+                    <TextBox Text="{Binding TargetValue, UpdateSourceTrigger=PropertyChanged}"/>
+                </DockPanel>
+
+                <DockPanel>
+                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="Id"
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                </DockPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 5. SwitchCaseCondition -->
+        <DataTemplate DataType="{x:Type models:SwitchCaseCondition}">
+            <StackPanel Margin="5">
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox IsEditable="True" 
+                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="Name"
+                              SelectedValuePath="Name"
+                              Text="{Binding TargetVariableName, UpdateSourceTrigger=PropertyChanged}" 
+                              ToolTip="Target Variable Name (Integers only)"/>
+                </DockPanel>
+
+                <TextBlock Text="케이스 목록 (Cases):" FontWeight="Bold" Margin="0,5,0,5"/>
+                
+                <ItemsControl ItemsSource="{Binding Cases}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBlock Text="값(Int):" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox Grid.Column="1" Text="{Binding CaseValue, UpdateSourceTrigger=PropertyChanged}"/>
+                                
+                                <TextBlock Grid.Column="2" Text="→ 이동:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                                <ComboBox Grid.Column="3" 
+                                          ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          SelectedValue="{Binding JumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Id"
+                                          ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+
+                                <Button Grid.Column="4" Content="-" Width="25" Margin="5,0,0,0" Background="#FFEBEE" Foreground="Red"
+                                        Command="{Binding DataContext.RemoveSwitchCaseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding .}"
+                                        ToolTip="Remove Case"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Content="+ 케이스 추가" 
+                        Command="{Binding DataContext.AddSwitchCaseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding .}"
+                        Margin="0,5,0,10" Background="#E8F5E9"/>
+
+                <DockPanel>
+                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="Id"
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                </DockPanel>
+            </StackPanel>
+        </DataTemplate>
+
         <!-- ==================================================================== -->
         <!-- [DataTemplates] Action Models -->
         <!-- ==================================================================== -->
@@ -299,6 +404,17 @@
                     </ComboBox>
                 </DockPanel>
 
+                <UniformGrid Columns="2" Margin="0,0,0,5">
+                    <DockPanel Margin="0,0,5,0">
+                        <TextBlock Text="클릭 횟수:" VerticalAlignment="Center" Width="70"/>
+                        <TextBox Text="{Binding ClickCount, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                    <DockPanel>
+                        <TextBlock Text="간격(ms):" VerticalAlignment="Center" Width="70"/>
+                        <TextBox Text="{Binding ClickIntervalMs, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                </UniformGrid>
+
                 <DockPanel>
                     <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="Gray"/>
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -316,6 +432,46 @@
                     <TextBlock Text="키 코드:" VerticalAlignment="Center" Width="70"/>
                     <TextBox Text="{Binding KeyCode, UpdateSourceTrigger=PropertyChanged}"/>
                 </DockPanel>
+                <DockPanel>
+                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="Gray"/>
+                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="Id"
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                </DockPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 3-1. VariableSetAction -->
+        <DataTemplate DataType="{x:Type models:VariableSetAction}">
+            <StackPanel Margin="5">
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox IsEditable="True" 
+                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="Name"
+                              SelectedValuePath="Name"
+                              Text="{Binding VariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                </DockPanel>
+
+                <Grid Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="연산:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox Grid.Column="1" SelectedValue="{Binding Operation}" SelectedValuePath="Content">
+                        <ComboBoxItem Content="Set"/>
+                        <ComboBoxItem Content="Add"/>
+                        <ComboBoxItem Content="Sub"/>
+                    </ComboBox>
+                </Grid>
+
+                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                    <TextBlock Text="값:" VerticalAlignment="Center" Width="70"/>
+                    <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
+                </DockPanel>
+
                 <DockPanel>
                     <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="Gray"/>
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -346,13 +502,59 @@
                               Text="{Binding TargetName, UpdateSourceTrigger=PropertyChanged}"/>
                 </DockPanel>
 
-                <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                    <TextBlock Text="상태:" VerticalAlignment="Center" Width="70"/>
-                    <ComboBox ItemsSource="{Binding DataContext.WindowControlStates, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                              SelectedItem="{Binding WindowState}"/>
-                </DockPanel>
-
                 <DockPanel>
+                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="Gray"/>
+                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="Id"
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                </DockPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 5. MultiAction -->
+        <DataTemplate DataType="{x:Type models:MultiAction}">
+            <StackPanel Margin="5">
+                <TextBlock Text="복합 액션 (Multi-Step Action)" FontWeight="Bold" Foreground="#673AB7" Margin="0,0,0,5"/>
+                
+                <Border Background="#F3E5F5" BorderBrush="#D1C4E9" BorderThickness="1" CornerRadius="4" Padding="5">
+                    <StackPanel>
+                        <!-- Sub-Actions List -->
+                        <ItemsControl ItemsSource="{Binding Actions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="White" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="2" Margin="0,0,0,5" Padding="5">
+                                        <DockPanel>
+                                            <!-- Delete Button -->
+                                            <Button DockPanel.Dock="Right" Content="🗑" Width="25" Height="25" VerticalAlignment="Top" Margin="5,0,0,0"
+                                                    Background="#FFEBEE" Foreground="#D32F2F" BorderThickness="0"
+                                                    Command="{Binding DataContext.RemoveSubActionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding .}"
+                                                    ToolTip="Remove this sub-action"/>
+                                            
+                                            <!-- Action Content (Recursive DataTemplate) -->
+                                            <ContentControl Content="{Binding}"/>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Add Action Panel -->
+                        <Separator Margin="0,5,0,5"/>
+                        <DockPanel LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="+ 추가" Width="50"
+                                    Command="{Binding DataContext.AddSubActionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding .}"
+                                    Background="#673AB7" Foreground="White" FontWeight="Bold"/>
+                            <ComboBox ItemsSource="{Binding DataContext.ActionTypes, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      SelectedItem="{Binding DataContext.SelectedSubActionType, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}"
+                                      Margin="0,0,5,0"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <DockPanel Margin="0,5,0,0">
                     <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="Gray"/>
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -455,6 +657,7 @@
                     <Button Content="그룹 복사" Command="{Binding DuplicateGroupCommand}" Padding="10,5"/>
                 </WrapPanel>
                 <WrapPanel HorizontalAlignment="Right">
+                    <Button Content="변수 관리" Command="{Binding OpenVariableManagerCommand}" Padding="10,5" Margin="0,0,5,0" Background="#E0E0E0"/>
                     <Button Content="스텝 추가" Command="{Binding AddSequenceCommand}" Padding="10,5" Margin="0,0,5,0"/>
                     <Button Content="스텝 삭제" Command="{Binding RemoveSequenceCommand}" Padding="10,5" Margin="0,0,15,0"/>
                     <Button Content="복사" Command="{Binding CopySequenceCommand}" Padding="8,5" Margin="0,0,5,0"/>
@@ -684,6 +887,41 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
+        </Grid>
+
+        <!-- Variable Manager Overlay -->
+        <Grid Grid.ColumnSpan="2" Background="#80000000" Visibility="{Binding IsVariableManagerOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Background="White" Width="500" Height="400" CornerRadius="10" Padding="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="변수 관리자 (Variable Manager)" FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding DefinedVariables}" AutoGenerateColumns="False" CanUserAddRows="False" Margin="0,0,0,10">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="변수명 (Name)" Binding="{Binding Name}" Width="120"/>
+                            <DataGridTextColumn Header="기본값 (Default)" Binding="{Binding DefaultValue}" Width="100"/>
+                            <DataGridTextColumn Header="설명 (Description)" Binding="{Binding Description}" Width="*"/>
+                            <DataGridTemplateColumn Width="50">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="❌" Command="{Binding DataContext.RemoveVariableDefinitionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" Background="Transparent" BorderThickness="0" Foreground="Red"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="+ 변수 추가" Command="{Binding AddVariableDefinitionCommand}" Padding="10,5" Margin="0,0,10,0" Background="#E0F7FA"/>
+                        <Button Content="닫기 (저장)" Command="{Binding CloseVariableManagerCommand}" Padding="20,5" Background="#2196F3" Foreground="White"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

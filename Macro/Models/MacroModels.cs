@@ -28,12 +28,16 @@ namespace Macro.Models
     [JsonDerivedType(typeof(ImageMatchCondition), typeDiscriminator: nameof(ImageMatchCondition))]
     [JsonDerivedType(typeof(GrayChangeCondition), typeDiscriminator: nameof(GrayChangeCondition))]
     [JsonDerivedType(typeof(VariableCompareCondition), typeDiscriminator: nameof(VariableCompareCondition))]
+    [JsonDerivedType(typeof(SwitchCaseCondition), typeDiscriminator: nameof(SwitchCaseCondition))]
     public interface IMacroCondition : IReactiveObject
     {
         Task<bool> CheckAsync(CancellationToken token = default);
         System.Windows.Point? FoundPoint { get; }
         string FailJumpName { get; set; }
         string FailJumpId { get; set; }
+
+        // Default implementation for Force Jump (Switch-Case)
+        Guid? GetForceJumpId() => null;
     }
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
@@ -42,6 +46,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(VariableSetAction), typeDiscriminator: nameof(VariableSetAction))]
     [JsonDerivedType(typeof(IdleAction), typeDiscriminator: nameof(IdleAction))]
     [JsonDerivedType(typeof(WindowControlAction), typeDiscriminator: nameof(WindowControlAction))]
+    [JsonDerivedType(typeof(MultiAction), typeDiscriminator: nameof(MultiAction))]
     public interface IMacroAction : IReactiveObject
     {
         Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null);
@@ -461,6 +466,109 @@ namespace Macro.Models
         }
     }
 
+    public class VariableDefinition : ReactiveObject
+    {
+        private string _name = string.Empty;
+        private string _defaultValue = string.Empty;
+        private string _description = string.Empty;
+
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public string DefaultValue
+        {
+            get => _defaultValue;
+            set => this.RaiseAndSetIfChanged(ref _defaultValue, value);
+        }
+
+        public string Description
+        {
+            get => _description;
+            set => this.RaiseAndSetIfChanged(ref _description, value);
+        }
+    }
+
+    public class SwitchCaseItem : ReactiveObject
+    {
+        private int _caseValue;
+        private string _jumpId = string.Empty;
+
+        public int CaseValue
+        {
+            get => _caseValue;
+            set => this.RaiseAndSetIfChanged(ref _caseValue, value);
+        }
+
+        public string JumpId
+        {
+            get => _jumpId;
+            set => this.RaiseAndSetIfChanged(ref _jumpId, value);
+        }
+    }
+
+    public class SwitchCaseCondition : ReactiveObject, IMacroCondition
+    {
+        private string _targetVariableName = string.Empty;
+        private ObservableCollection<SwitchCaseItem> _cases = new ObservableCollection<SwitchCaseItem>();
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        public string TargetVariableName
+        {
+            get => _targetVariableName;
+            set => this.RaiseAndSetIfChanged(ref _targetVariableName, value);
+        }
+
+        public ObservableCollection<SwitchCaseItem> Cases
+        {
+            get => _cases;
+            set => this.RaiseAndSetIfChanged(ref _cases, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public System.Windows.Point? FoundPoint => null;
+
+        public async Task<bool> CheckAsync(CancellationToken token = default)
+        {
+            // SwitchCase는 조건 검사 자체는 항상 통과한 것으로 처리하고, 
+            // 실제 분기는 GetForceJumpId()에서 처리함.
+            return await Task.FromResult(true);
+        }
+
+        public Guid? GetForceJumpId()
+        {
+            if (string.IsNullOrEmpty(TargetVariableName)) return null;
+
+            var vars = MacroEngineService.Instance.Variables;
+            if (vars.TryGetValue(TargetVariableName, out var valStr))
+            {
+                if (int.TryParse(valStr, out int currentVal))
+                {
+                    var match = Cases.FirstOrDefault(c => c.CaseValue == currentVal);
+                    if (match != null && Guid.TryParse(match.JumpId, out var guid))
+                    {
+                        return guid;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
     #endregion
 
     #region Action Implementations
@@ -470,6 +578,8 @@ namespace Macro.Models
         private int _x;
         private int _y;
         private string _clickType = "Left"; // Left, Right, Double
+        private int _clickCount = 1;
+        private int _clickIntervalMs = 100;
         private bool _useConditionAddress;
         private string _failJumpName = string.Empty;
 
@@ -505,6 +615,18 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _clickType, value);
         }
 
+        public int ClickCount
+        {
+            get => _clickCount;
+            set => this.RaiseAndSetIfChanged(ref _clickCount, value);
+        }
+
+        public int ClickIntervalMs
+        {
+            get => _clickIntervalMs;
+            set => this.RaiseAndSetIfChanged(ref _clickIntervalMs, value);
+        }
+
         public bool UseConditionAddress
         {
             get => _useConditionAddress;
@@ -528,7 +650,7 @@ namespace Macro.Models
         public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
             // 백그라운드 스레드에서 UI 차단 없이 실행
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 if (token.IsCancellationRequested) return;
 
@@ -547,7 +669,22 @@ namespace Macro.Models
                 }
                 
                 if (!token.IsCancellationRequested)
-                    InputHelper.MoveAndClick(finalX, finalY, ClickType);
+                {
+                    int count = Math.Max(1, ClickCount);
+                    int interval = Math.Max(10, ClickIntervalMs);
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (token.IsCancellationRequested) break;
+                        
+                        InputHelper.MoveAndClick(finalX, finalY, ClickType);
+                        
+                        if (i < count - 1)
+                        {
+                            await Task.Delay(interval, token);
+                        }
+                    }
+                }
             }, token);
         }
     }
@@ -824,6 +961,56 @@ namespace Macro.Models
                     }
                 }
             }, token);
+        }
+    }
+
+    public class MultiAction : ReactiveObject, IMacroAction, ISupportCoordinateTransform
+    {
+        private ObservableCollection<IMacroAction> _actions = new ObservableCollection<IMacroAction>();
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        public ObservableCollection<IMacroAction> Actions
+        {
+            get => _actions;
+            set => this.RaiseAndSetIfChanged(ref _actions, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
+        {
+            foreach (var action in Actions)
+            {
+                if (token.IsCancellationRequested) break;
+                
+                // 하위 액션 실행
+                // MultiAction 자체는 FailJump를 처리하지 않고, 하위 액션에서 예외가 발생하면 
+                // Engine이 MultiAction 레벨의 예외로 처리하거나, 하위 액션이 던진 예외를 그대로 상위로 전파함.
+                await action.ExecuteAsync(token, conditionPoint);
+            }
+        }
+
+        public void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY)
+        {
+            // 하위 액션들에게 좌표 변환 정보 전파
+            foreach (var action in Actions)
+            {
+                if (action is ISupportCoordinateTransform t)
+                {
+                    t.SetTransform(scaleX, scaleY, offsetX, offsetY);
+                }
+            }
         }
     }
 

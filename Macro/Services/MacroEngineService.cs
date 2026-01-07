@@ -25,6 +25,15 @@ namespace Macro.Services
             }
         }
 
+        private class ForceJumpException : Exception
+        {
+            public string JumpId { get; }
+            public ForceJumpException(string jumpId) : base("Force Jump")
+            {
+                JumpId = jumpId;
+            }
+        }
+
         // Singleton Implementation
         private static readonly Lazy<MacroEngineService> _instance =
             new Lazy<MacroEngineService>(() => new MacroEngineService());
@@ -85,6 +94,38 @@ namespace Macro.Services
             var token = _cts.Token;
 
             Variables.Clear();
+
+            // Load Variable Defaults from .vars.json
+            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+            if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
+            {
+                var varsPath = System.IO.Path.ChangeExtension(currentRecipe.FilePath, ".vars.json");
+                if (System.IO.File.Exists(varsPath))
+                {
+                    try
+                    {
+                        var json = System.IO.File.ReadAllText(varsPath);
+                        var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var defs = System.Text.Json.JsonSerializer.Deserialize<List<VariableDefinition>>(json, options);
+                        if (defs != null)
+                        {
+                            foreach (var d in defs)
+                            {
+                                if (!string.IsNullOrEmpty(d.Name))
+                                {
+                                    Variables[d.Name] = d.DefaultValue ?? string.Empty;
+                                }
+                            }
+                        }
+                        AddLog($"변수 초기화 완료: {Variables.Count}개 로드됨.");
+                    }
+                    catch (Exception ex)
+                    {
+                        AddLog($"변수 파일 로드 실패: {ex.Message}");
+                    }
+                }
+            }
+
             AddLog("=== 매크로 실행 시작 ===");
 
             try
@@ -169,6 +210,13 @@ namespace Macro.Services
                                                                     throw new ComponentFailureException($"PreCondition 실패: {item.Name}", item.PreCondition.FailJumpName, item.PreCondition.FailJumpId);
                                                                 }
                                                                 foundPoint = item.PreCondition.FoundPoint;
+
+                                                                // [Switch Case] 강제 분기 확인
+                                                                var forceJumpId = item.PreCondition.GetForceJumpId();
+                                                                if (forceJumpId.HasValue)
+                                                                {
+                                                                    throw new ForceJumpException(forceJumpId.Value.ToString());
+                                                                }
                                                             }
                         
                                                             // 2. Action 실행 전 데이터 주입 (GrayChangeCondition 등)
@@ -213,6 +261,13 @@ namespace Macro.Services
                                                             }
                         
                                                             stepSuccess = true;
+                                                        }
+                                                        catch (ForceJumpException fjex)
+                                                        {
+                                                            AddLog($"    -> 분기 조건 만족: {fjex.JumpId}");
+                                                            allRepeatsSuccess = false; // 성공으로 치지 않고 분기 처리
+                                                            jumpTargetId = fjex.JumpId;
+                                                            break; 
                                                         }
                                                         catch (ComponentFailureException cfex)
                                                         {

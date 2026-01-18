@@ -86,6 +86,18 @@ namespace Macro.Utils
                 throw new IOException($"A recipe with the name '{newName}' already exists.");
 
             File.Copy(sourceFilePath, destFilePath);
+
+            // [New] Copy sidecar .vars.json if exists
+            var sourceVarsPath = Path.ChangeExtension(sourceFilePath, ".vars.json");
+            if (File.Exists(sourceVarsPath))
+            {
+                var destVarsPath = Path.ChangeExtension(destFilePath, ".vars.json");
+                try
+                {
+                    File.Copy(sourceVarsPath, destVarsPath, true);
+                }
+                catch { /* Ignore var copy failures */ }
+            }
         }
 
         private void LoadSequenceData(string filePath)

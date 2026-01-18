@@ -428,6 +428,8 @@ namespace Macro.ViewModels
                     await Task.Run(() => 
                     {
                         var captureSource = ScreenCaptureHelper.GetScreenCapture();
+                        var bounds = ScreenCaptureHelper.GetScreenBounds(); // Bounds 정보 획득
+
                         if (captureSource == null) 
                         {
                             condition.TestResult = "Capture Failed";
@@ -439,10 +441,11 @@ namespace Macro.ViewModels
                         double scaleY = 1.0;
                         double winX = 0;
                         double winY = 0;
+                        (int X, int Y, int Width, int Height)? winInfo = null;
 
                         if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
                         {
-                            var winInfo = GetTargetWindowInfo(parentGroup);
+                            winInfo = GetTargetWindowInfo(parentGroup);
                             if (winInfo.HasValue)
                             {
                                 if (parentGroup.RefWindowWidth > 0 && parentGroup.RefWindowHeight > 0)
@@ -461,17 +464,48 @@ namespace Macro.ViewModels
 
                         if (condition.UseRegion && condition.RegionW > 0 && condition.RegionH > 0)
                         {
-                            // (원래 상대좌표 * 비율) + 현재 창 시작점
-                            double rx = condition.RegionX * scaleX + winX;
-                            double ry = condition.RegionY * scaleY + winY;
+                            // 절대 좌표 계산: (원래 상대좌표 * 비율) + 현재 창 시작점
+                            double rxAbs = condition.RegionX * scaleX + winX;
+                            double ryAbs = condition.RegionY * scaleY + winY;
+                            
+                            // 이미지 로컬 좌표로 변환
+                            double rx = rxAbs - bounds.Left;
+                            double ry = ryAbs - bounds.Top;
+
                             double rw = condition.RegionW * scaleX;
                             double rh = condition.RegionH * scaleY;
 
                             searchRoi = new System.Windows.Rect(rx, ry, rw, rh);
                             drawRoi = new OpenCvSharp.Rect((int)rx, (int)ry, (int)rw, (int)rh);
                         }
+                        else if (winInfo.HasValue && parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
+                        {
+                            // [Fallback] ROI 미지정 시, WindowRelative 모드라면 창 전체를 검색 영역으로 자동 설정
+                            double rx = winInfo.Value.X - bounds.Left;
+                            double ry = winInfo.Value.Y - bounds.Top;
+                            double rw = winInfo.Value.Width;
+                            double rh = winInfo.Value.Height;
+
+                            searchRoi = new System.Windows.Rect(rx, ry, rw, rh);
+                            drawRoi = new OpenCvSharp.Rect((int)rx, (int)ry, (int)rw, (int)rh);
+                        }
                         
-                        var result = ImageSearchService.FindImageDetailed(captureSource, condition.ImagePath, condition.Threshold, searchRoi);
+                        // [Path Resolve] 상대 경로 처리
+                        string targetPath = condition.ImagePath;
+                        if (!string.IsNullOrEmpty(targetPath) && !Path.IsPathRooted(targetPath))
+                        {
+                            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+                            if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
+                            {
+                                var dir = Path.GetDirectoryName(currentRecipe.FilePath);
+                                if (dir != null)
+                                {
+                                    targetPath = Path.Combine(dir, targetPath);
+                                }
+                            }
+                        }
+
+                        var result = ImageSearchService.FindImageDetailed(captureSource, targetPath, condition.Threshold, searchRoi, scaleX, scaleY);
 
                         condition.TestScore = result.Score;
 
@@ -487,12 +521,15 @@ namespace Macro.ViewModels
 
                             if (result.Point.HasValue)
                             {
-                                condition.TestResult = $"Success ({result.Point.Value.X:F0}, {result.Point.Value.Y:F0})";
+                                // 결과 텍스트는 절대 좌표로 표시 (디버그 정보 포함)
+                                double foundAbsX = result.Point.Value.X + bounds.Left;
+                                double foundAbsY = result.Point.Value.Y + bounds.Top;
+                                condition.TestResult = $"Found({foundAbsX:F0},{foundAbsY:F0}) Bounds[{bounds.Left},{bounds.Top}]";
                                 
                                 int tW = 50, tH = 50;
                                 try 
                                 {
-                                    using (var tempMat = Cv2.ImRead(condition.ImagePath))
+                                    using (var tempMat = Cv2.ImRead(targetPath))
                                     {
                                         if (!tempMat.Empty())
                                         {
@@ -506,7 +543,7 @@ namespace Macro.ViewModels
                                 int scaledW = (int)(tW * scaleX);
                                 int scaledH = (int)(tH * scaleY);
 
-                                // 중심 -> 좌상단 변환 (스케일된 크기 기준)
+                                // 중심 -> 좌상단 변환 (이미지 로컬 좌표 기준)
                                 int matchX = (int)(result.Point.Value.X - scaledW / 2);
                                 int matchY = (int)(result.Point.Value.Y - scaledH / 2);
                                 var matchRect = new OpenCvSharp.Rect(matchX, matchY, scaledW, scaledH);
@@ -729,6 +766,20 @@ namespace Macro.ViewModels
 
             try
             {
+                // [Path Resolve] 저장 전 절대 경로를 상대 경로로 변환
+                var recipeDir = Path.GetDirectoryName(currentRecipe.FilePath);
+                if (recipeDir != null)
+                {
+                    foreach (var group in Groups)
+                    {
+                        foreach (var item in group.Items)
+                        {
+                            ConvertPathToRelative(item.PreCondition, recipeDir);
+                            ConvertPathToRelative(item.PostCondition, recipeDir);
+                        }
+                    }
+                }
+
                 // Save as Group List
                 var json = JsonSerializer.Serialize(Groups, GetJsonOptions());
                 await File.WriteAllTextAsync(currentRecipe.FilePath, json);
@@ -739,6 +790,25 @@ namespace Macro.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to save recipe: {ex.Message}");
+            }
+        }
+
+        private void ConvertPathToRelative(IMacroCondition? condition, string baseDir)
+        {
+            if (condition is ImageMatchCondition imgMatch)
+            {
+                if (!string.IsNullOrEmpty(imgMatch.ImagePath) && Path.IsPathRooted(imgMatch.ImagePath))
+                {
+                    // 파일이 레시피 폴더와 동일한 위치에 있는지 확인
+                    var fileDir = Path.GetDirectoryName(imgMatch.ImagePath);
+                    
+                    // 주의: 경로 비교 시 정규화 필요할 수 있음 (대소문자 등)
+                    // 여기서는 간단히 문자열 비교
+                    if (string.Equals(fileDir?.TrimEnd('\\', '/'), baseDir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                    {
+                         imgMatch.ImagePath = Path.GetFileName(imgMatch.ImagePath);
+                    }
+                }
             }
         }
 
@@ -955,7 +1025,7 @@ namespace Macro.ViewModels
                         // 캐시 비우기 (새 이미지가 반영되도록)
                         ImageSearchService.ClearCache();
                         
-                        condition.ImagePath = destPath; 
+                        condition.ImagePath = newFileName; // Relative Path 
 
                         // 기존 파일이 다른 곳에서 안 쓰이면 삭제
                         if (!string.IsNullOrEmpty(oldPath) && File.Exists(oldPath))

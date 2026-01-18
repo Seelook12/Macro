@@ -120,6 +120,10 @@ namespace Macro.ViewModels
 
             foreach (var file in files)
             {
+                // [Fix] Filter out .vars.json files
+                if (file.EndsWith(".vars.json", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 Recipes.Add(new RecipeItem
                 {
                     FileName = Path.GetFileNameWithoutExtension(file),

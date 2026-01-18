@@ -13,47 +13,41 @@ namespace Macro.Utils
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool DeleteObject(IntPtr hObject);
 
+        public static (int Left, int Top, int Width, int Height) GetScreenBounds()
+        {
+            int minX = 0;
+            int minY = 0;
+            int maxX = 0;
+            int maxY = 0;
+
+            // System.Windows.Forms.Screen을 사용하여 전체 모니터 영역(물리 픽셀) 계산
+            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                var b = screen.Bounds;
+                if (b.Left < minX) minX = b.Left;
+                if (b.Top < minY) minY = b.Top;
+                if (b.Right > maxX) maxX = b.Right;
+                if (b.Bottom > maxY) maxY = b.Bottom;
+            }
+
+            return (minX, minY, maxX - minX, maxY - minY);
+        }
+
         public static BitmapSource GetScreenCapture()
         {
-            // 1. DPI 배율 가져오기 (메인 윈도우가 없더라도 시스템 기본값 사용 시도)
-            double scaleX = 1.0;
-            double scaleY = 1.0;
+            var bounds = GetScreenBounds();
 
-            try
-            {
-                var mainWindow = System.Windows.Application.Current?.Dispatcher?.Invoke(() => System.Windows.Application.Current.MainWindow);
-                if (mainWindow != null)
-                {
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        var source = System.Windows.PresentationSource.FromVisual(mainWindow);
-                        if (source != null && source.CompositionTarget != null)
-                        {
-                            scaleX = source.CompositionTarget.TransformToDevice.M11;
-                            scaleY = source.CompositionTarget.TransformToDevice.M22;
-                        }
-                    });
-                }
-            }
-            catch { /* Ignore and use default 1.0 */ }
+            if (bounds.Width <= 0 || bounds.Height <= 0) return null;
 
-            // 2. 가상 스크린 영역 (DIP -> Pixel 변환)
-            int screenLeft = (int)(SystemParameters.VirtualScreenLeft * scaleX);
-            int screenTop = (int)(SystemParameters.VirtualScreenTop * scaleY);
-            int screenWidth = (int)(SystemParameters.VirtualScreenWidth * scaleX);
-            int screenHeight = (int)(SystemParameters.VirtualScreenHeight * scaleY);
-
-            if (screenWidth <= 0 || screenHeight <= 0) return null;
-
-            using (Bitmap bmp = new Bitmap(screenWidth, screenHeight))
+            using (Bitmap bmp = new Bitmap(bounds.Width, bounds.Height))
             {
                 using (Graphics g = Graphics.FromImage(bmp))
                 {
-                    // 가상 스크린 전체를 물리 픽셀 단위로 캡처
-                    g.CopyFromScreen(screenLeft, screenTop, 0, 0, bmp.Size);
+                    // 전체 가상 스크린 영역 캡처 (물리 픽셀 기준)
+                    g.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bmp.Size);
                 }
 
-                // 3. Bitmap -> BitmapSource 변환 (DPI 정보 포함)
+                // 3. Bitmap -> BitmapSource 변환
                 IntPtr hBitmap = bmp.GetHbitmap();
                 try
                 {
@@ -63,7 +57,6 @@ namespace Macro.Utils
                         Int32Rect.Empty,
                         BitmapSizeOptions.FromEmptyOptions());
 
-                    // 다른 스레드에서 접근 가능하도록 얼림
                     bitmapSource.Freeze();
                     return bitmapSource;
                 }

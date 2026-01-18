@@ -224,14 +224,46 @@ namespace Macro.Services
                                                             {
                                                                 // Dispatcher.Invoke는 데드락 위험이 있으므로 가능한 한 지양하거나, 
                                                                 // ScreenCaptureHelper 내부에서 처리하도록 유도해야 함.
-                                                                var preCapture = await Task.Run(() => 
+                                                                var captureData = await Task.Run(() => 
                                                                 {
-                                                                    return System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
+                                                                    return System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
+                                                                    {
+                                                                        var bmp = ScreenCaptureHelper.GetScreenCapture();
+                                                                        var bounds = ScreenCaptureHelper.GetScreenBounds();
+                                                                        return new { Image = bmp, Bounds = bounds };
+                                                                    });
                                                                 });
                         
-                                                                if (preCapture != null)
+                                                                if (captureData?.Image != null)
                                                                 {
-                                                                    gcc.ReferenceValue = ImageSearchService.GetGrayAverage(preCapture, gcc.X, gcc.Y, gcc.Width, gcc.Height);
+                                                                    // 절대 좌표를 이미지 로컬 좌표로 변환
+                                                                    // gcc는 이미 ConfigureRelativeCoordinates에 의해 Transform이 설정된 상태임.
+                                                                    // 하지만 여기서는 프로퍼티(X, Y) 접근 시 자동으로 계산되지 않으므로 수동 계산 필요할 수 있으나,
+                                                                    // GrayChangeCondition은 ISupportCoordinateTransform을 구현하며 이미 스케일이 적용된 상태가 아님.
+                                                                    // 아, ConfigureRelativeCoordinates는 gcc의 private 필드(_scaleX 등)를 설정함.
+                                                                    // gcc.X는 원본 좌표임.
+                                                                    // 따라서 gcc 내부 로직과 유사하게 계산해야 함.
+                                                                    
+                                                                    // 하지만 private 필드에 접근할 수 없으므로...
+                                                                    // 잠깐, gcc 객체 자체는 모델이고 SetTransform으로 스케일이 주입됨.
+                                                                    // 그러나 외부에서 계산하려면 public 메서드나 속성이 필요함.
+                                                                    // 가장 좋은 방법: GrayChangeCondition에 'MeasureCurrentValue(capture, bounds)' 메서드를 추가하는 것.
+                                                                    // 하지만 인터페이스 변경이 부담스러우니, 여기서 Reflection이나 유사 로직을 써야 하나?
+                                                                    // 아니, GrayChangeCondition은 모델 클래스이므로 로직을 캡슐화하는 게 맞음.
+                                                                    // GetCurrentValue(BitmapSource, bounds) 메서드를 추가하자.
+                                                                    
+                                                                    // 임시 방편: gcc의 private 필드를 읽을 수 없으니...
+                                                                    // 아니, gcc는 이미 _scaleX 등이 세팅되어 있음.
+                                                                    // 외부에서 계산하려면 gcc의 X, Y, Width, Height만 알면 안 되고 _scaleX도 알아야 함.
+                                                                    // GrayChangeCondition에 `Measure(BitmapSource, bounds)` 메서드를 추가하는 게 정석임.
+                                                                    
+                                                                    // 일단 여기서는 기존 로직대로 하되, _scaleX 등에 접근할 수 없다는 문제를 해결해야 함.
+                                                                    // 아, `ImageSearchService.GetGrayAverage` 호출 시 좌표를 넘겨야 하는데...
+                                                                    // gcc 내부 필드를 못 읽음.
+                                                                    
+                                                                    // 해결책: GrayChangeCondition에 `UpdateReferenceValue(capture, bounds)` 메서드 추가.
+                                                                    gcc.UpdateReferenceValue(captureData.Image, captureData.Bounds);
+                                                                    
                                                                     AddLog($"    - [Gray] 기준값 측정 완료: {gcc.ReferenceValue:F2}");
                                                                 }
                                                             }
@@ -446,16 +478,20 @@ namespace Macro.Services
                     // 3. Action 실행 전 데이터 주입 (GrayChangeCondition)
                     if (item.PostCondition is GrayChangeCondition gcc)
                     {
-                        var preCapture = await Task.Run(() => 
+                        var captureData = await Task.Run(() => 
                         {
-                            return System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
+                            return System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
+                            {
+                                var bmp = ScreenCaptureHelper.GetScreenCapture();
+                                var bounds = ScreenCaptureHelper.GetScreenBounds();
+                                return new { Image = bmp, Bounds = bounds };
+                            });
                         });
                 
-                        if (preCapture != null)
+                        if (captureData?.Image != null)
                         {
                             // GrayChangeCondition ReferenceValue 측정
-                            // 단일 실행에서는 단순히 현재 값을 ReferenceValue로 설정하는 정도
-                            gcc.ReferenceValue = ImageSearchService.GetGrayAverage(preCapture, gcc.X, gcc.Y, gcc.Width, gcc.Height);
+                            gcc.UpdateReferenceValue(captureData.Image, captureData.Bounds);
                         }
                     }
 

@@ -224,24 +224,40 @@ namespace Macro.Models
                 {
                     if (token.IsCancellationRequested) return false;
 
-                    // 1. 현재 화면 캡처
-                    var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
+                    // 1. 현재 화면 캡처 및 영역 정보 획득
+                    var captureData = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
                     {
                         var bmp = ScreenCaptureHelper.GetScreenCapture();
-                        bmp?.Freeze(); // 다른 스레드에서 사용 가능하게 얼림
-                        return bmp;
+                        var bounds = ScreenCaptureHelper.GetScreenBounds();
+                        bmp?.Freeze();
+                        return new { Image = bmp, Bounds = bounds };
                     });
 
-                    if (capture == null) return false;
+                    if (captureData?.Image == null) return false;
 
                     if (string.IsNullOrEmpty(ImagePath)) return false;
 
-                    // ROI 영역 확인
+                    // [Path Resolve] 상대 경로 처리
+                    string targetPath = ImagePath;
+                    if (!string.IsNullOrEmpty(targetPath) && !System.IO.Path.IsPathRooted(targetPath))
+                    {
+                        var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+                        if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
+                        {
+                            var dir = System.IO.Path.GetDirectoryName(currentRecipe.FilePath);
+                            if (dir != null)
+                            {
+                                targetPath = System.IO.Path.Combine(dir, targetPath);
+                            }
+                        }
+                    }
+
+                    // ROI 영역 확인 (절대 좌표 -> 이미지 로컬 좌표 변환)
                     System.Windows.Rect? roi = null;
                     if (UseRegion && RegionW > 0 && RegionH > 0)
                     {
-                        double rx = RegionX * _scaleX + _offsetX;
-                        double ry = RegionY * _scaleY + _offsetY;
+                        double rx = (RegionX * _scaleX + _offsetX) - captureData.Bounds.Left;
+                        double ry = (RegionY * _scaleY + _offsetY) - captureData.Bounds.Top;
                         double rw = RegionW * _scaleX;
                         double rh = RegionH * _scaleY;
                         roi = new System.Windows.Rect(rx, ry, rw, rh);
@@ -250,7 +266,8 @@ namespace Macro.Models
                     if (token.IsCancellationRequested) return false;
 
                     // 2. 이미지 서치
-                    var result = ImageSearchService.FindImage(capture, ImagePath, Threshold, roi);
+                    // 스케일 정보 전달 (_scaleX, _scaleY는 ConfigureRelativeCoordinates에서 설정됨)
+                    var result = ImageSearchService.FindImage(captureData.Image, targetPath, Threshold, roi, _scaleX, _scaleY);
 
                     if (!string.IsNullOrEmpty(ResultVariableName))
                     {
@@ -259,7 +276,10 @@ namespace Macro.Models
 
                     if (result.HasValue)
                     {
-                        _foundPoint = result.Value;
+                        // 이미지 로컬 좌표 -> 스크린 절대 좌표 변환
+                        _foundPoint = new System.Windows.Point(
+                            result.Value.X + captureData.Bounds.Left, 
+                            result.Value.Y + captureData.Bounds.Top);
                         return true;
                     }
 
@@ -353,6 +373,24 @@ namespace Macro.Models
 
         public System.Windows.Point? FoundPoint => null;
 
+        public void UpdateReferenceValue(System.Windows.Media.Imaging.BitmapSource capture, (int Left, int Top, int Width, int Height) bounds)
+        {
+            if (capture == null) return;
+
+            // 절대 좌표 계산
+            double absX = X * _scaleX + _offsetX;
+            double absY = Y * _scaleY + _offsetY;
+
+            // 이미지 로컬 좌표로 변환
+            int tx = (int)(absX - bounds.Left);
+            int ty = (int)(absY - bounds.Top);
+            
+            int tw = (int)(Width * _scaleX);
+            int th = (int)(Height * _scaleY);
+
+            ReferenceValue = ImageSearchService.GetGrayAverage(capture, tx, ty, tw, th);
+        }
+
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
             if (DelayMs > 0)
@@ -366,15 +404,27 @@ namespace Macro.Models
                 {
                     if (token.IsCancellationRequested) return false;
 
-                    var capture = System.Windows.Application.Current?.Dispatcher?.Invoke(() => ScreenCaptureHelper.GetScreenCapture());
-                    if (capture == null) return false;
+                    var captureData = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
+                    {
+                        var bmp = ScreenCaptureHelper.GetScreenCapture();
+                        var bounds = ScreenCaptureHelper.GetScreenBounds();
+                        return new { Image = bmp, Bounds = bounds };
+                    });
 
-                    int tx = (int)(X * _scaleX + _offsetX);
-                    int ty = (int)(Y * _scaleY + _offsetY);
+                    if (captureData?.Image == null) return false;
+
+                    // 절대 좌표 계산
+                    double absX = X * _scaleX + _offsetX;
+                    double absY = Y * _scaleY + _offsetY;
+
+                    // 이미지 로컬 좌표로 변환
+                    int tx = (int)(absX - captureData.Bounds.Left);
+                    int ty = (int)(absY - captureData.Bounds.Top);
+                    
                     int tw = (int)(Width * _scaleX);
                     int th = (int)(Height * _scaleY);
 
-                    double currentValue = ImageSearchService.GetGrayAverage(capture, tx, ty, tw, th);
+                    double currentValue = ImageSearchService.GetGrayAverage(captureData.Image, tx, ty, tw, th);
 
 
                     if (ReferenceValue == null)

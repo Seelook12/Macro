@@ -124,10 +124,27 @@ namespace Macro.ViewModels
                         var loadedGroups = JsonSerializer.Deserialize<List<SequenceGroup>>(json, options);
                         
                         // Check if it's really a group list (check first item)
-                        if (loadedGroups != null && loadedGroups.Count > 0 && loadedGroups[0].Items != null)
+                        if (loadedGroups != null && loadedGroups.Count > 0)
                         {
                             foreach (var group in loadedGroups)
                             {
+                                // 1. Start Group 처리 (Dummy Init Item 생성)
+                                if (group.IsStartGroup)
+                                {
+                                    if (!string.IsNullOrEmpty(group.StartJumpId))
+                                    {
+                                        var initItem = new SequenceItem(new IdleAction { DelayTimeMs = 0 })
+                                        {
+                                            Name = "Initialize (Start)",
+                                            SuccessJumpId = group.StartJumpId
+                                        };
+                                        finalSequence.Add(initItem);
+                                    }
+                                    // Start Group의 Items는 무시 (규칙상 비어있어야 함)
+                                    continue;
+                                }
+
+                                // 2. 일반 그룹 처리
                                 if (!group.Items.Any()) continue;
 
                                 foreach (var item in group.Items)

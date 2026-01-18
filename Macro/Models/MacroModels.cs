@@ -1247,11 +1247,25 @@ namespace Macro.Models
         private string _processNotFoundJumpId = string.Empty;
         private int _refWindowWidth = 1920;
         private int _refWindowHeight = 1080;
+        private bool _isStartGroup = false;
+        private string _startJumpId = string.Empty;
 
         public string Name
         {
             get => _name;
             set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public bool IsStartGroup
+        {
+            get => _isStartGroup;
+            set => this.RaiseAndSetIfChanged(ref _isStartGroup, value);
+        }
+
+        public string StartJumpId
+        {
+            get => _startJumpId;
+            set => this.RaiseAndSetIfChanged(ref _startJumpId, value);
         }
 
         public ObservableCollection<SequenceItem> Items

@@ -159,6 +159,17 @@
     - 노드 간 이동 시 선택된 점프 타겟 값이 소실되지 않도록 목록 갱신 타이밍 최적화.
 - **Fail-safe 생성자**: JSON 로드 중 Action 데이터가 누락된 경우 `null` 대신 `IdleAction`으로 자동 복구하여 앱 크래시(ArgumentNullException) 방지.
 
+### 3.21. 매크로 진입점(Entry Point) 시스템 도입 (2026-01-18)
+- **Concept**: 매크로 시작 시 수행할 첫 번째 스텝을 명시적으로 지정할 수 있는 전용 인터페이스 도입.
+- **START Group**:
+    - 레시피 최상단에 고정된 **🏁 START** 노드(`IsStartGroup`)를 강제 생성.
+    - 해당 노드는 삭제, 이동, 복제 및 하위 스텝 추가가 불가능하도록 제한하여 매크로 구조의 일관성 확보.
+- **Entry Point Logic**:
+    - START 그룹 전용 에디터에서 `StartJumpId`를 설정하여 실제 매크로가 시작될 위치를 지정.
+    - 실행 엔진(Dashboard) 로드 시, START 그룹을 `Initialize (Start)`라는 더미 액션으로 변환하여 지정된 스텝으로 즉시 점프(Jump)하도록 구현.
+- **UI/UX**: 
+    - 트리뷰 및 점프 타겟 목록에서 START 지점을 특수 아이콘(🏁)으로 시각화하여 일반 그룹(📁)과 명확히 구분.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
 - **주요 해결 사항**: 

@@ -604,11 +604,34 @@
                             </Grid.ColumnDefinitions>
                             
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="📁" Margin="0,0,5,0" Foreground="#FFA000"/>
+                                <TextBlock Margin="0,0,5,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="📁"/>
+                                            <Setter Property="Foreground" Value="#FFA000"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
+                                                    <Setter Property="Text" Value="🏁"/>
+                                                    <Setter Property="Foreground" Value="#D32F2F"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                                 <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
                             </StackPanel>
                             
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
                                 <!-- Group Move Buttons -->
                                 <Button Content="▲" Width="15" Height="15" Padding="0" Margin="0,0,2,0" FontSize="10"
                                         Command="{Binding DataContext.MoveGroupUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -687,79 +710,144 @@
                     </Style>
                 </StackPanel.Style>
 
-                <TextBlock Text="그룹 설정 (Group Settings)" FontSize="20" FontWeight="Bold" Margin="0,0,0,15" Foreground="#EF6C00"/>
+                <!-- Normal Group Header -->
+                <TextBlock Text="그룹 설정 (Group Settings)" FontSize="20" FontWeight="Bold" Margin="0,0,0,15" Foreground="#EF6C00">
+                    <TextBlock.Style>
+                         <Style TargetType="TextBlock">
+                             <Setter Property="Visibility" Value="Visible"/>
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
+                                     <Setter Property="Visibility" Value="Collapsed"/>
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- Start Group Header -->
+                <TextBlock Text="시작 지점 설정 (Entry Point)" FontSize="20" FontWeight="Bold" Margin="0,0,0,15" Foreground="#D32F2F">
+                    <TextBlock.Style>
+                         <Style TargetType="TextBlock">
+                             <Setter Property="Visibility" Value="Collapsed"/>
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
+                                     <Setter Property="Visibility" Value="Visible"/>
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 
-                <DockPanel LastChildFill="True" Margin="0,0,0,10">
-                    <TextBlock Text="그룹 이름:" VerticalAlignment="Center" Margin="0,0,10,0" Width="80"/>
-                    <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
-                </DockPanel>
-
-                <!-- Target Window Context Settings (Moved from SequenceItem) -->
-                <GroupBox Header="대상 윈도우 설정 (Global Context for this Group)" Margin="0,0,0,15" Padding="10" BorderBrush="#9C27B0">
+                <!-- Start Step Selection (Only for Start Group) -->
+                <GroupBox Header="시작 스텝 지정" Margin="0,0,0,15" Padding="10" BorderBrush="#D32F2F">
+                    <GroupBox.Style>
+                         <Style TargetType="GroupBox">
+                             <Setter Property="Visibility" Value="Collapsed"/>
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
+                                     <Setter Property="Visibility" Value="Visible"/>
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                    </GroupBox.Style>
+                    
                     <StackPanel>
-                        <DockPanel LastChildFill="True" Margin="0,0,0,10">
-                            <TextBlock Text="좌표 모드:" VerticalAlignment="Center" Width="100"/>
-                            <ComboBox ItemsSource="{Binding DataContext.CoordinateModes, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                                      SelectedItem="{Binding CoordinateMode}"/>
+                        <TextBlock Text="매크로 실행 시 가장 먼저 수행할 스텝을 선택하세요." Margin="0,0,0,10" Foreground="Gray"/>
+                        <DockPanel LastChildFill="True">
+                            <TextBlock Text="시작 스텝:" VerticalAlignment="Center" Width="80" FontWeight="Bold"/>
+                            <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      SelectedValue="{Binding StartJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Id"
+                                      ItemTemplate="{StaticResource JumpTargetTemplate}"/>
                         </DockPanel>
-
-                        <StackPanel>
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding CoordinateMode}" Value="WindowRelative">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-                            
-                            <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                                <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="100"/>
-                                <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          SelectedItem="{Binding ContextSearchMethod}"/>
-                            </DockPanel>
-
-                            <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                                <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="100"/>
-                                <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
-                                        Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding .}"
-                                        ToolTip="목록 새로고침"/>
-                                <ComboBox IsEditable="True" 
-                                          ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Text="{Binding TargetProcessName, UpdateSourceTrigger=PropertyChanged}"
-                                          ToolTip="Process Name or Window Title"/>
-                            </DockPanel>
-
-                            <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                                <TextBlock Text="창 상태:" VerticalAlignment="Center" Width="100"/>
-                                <ComboBox ItemsSource="{Binding DataContext.WindowControlStates, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          SelectedItem="{Binding ContextWindowState}"/>
-                            </DockPanel>
-
-                            <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                                <TextBlock Text="미발견 시 이동:" VerticalAlignment="Center" Width="100" Foreground="#C62828"/>
-                                <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          SelectedValue="{Binding ProcessNotFoundJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          SelectedValuePath="Id"
-                                          ItemTemplate="{StaticResource JumpTargetTemplate}"/>
-                            </DockPanel>
-
-                            <UniformGrid Columns="2" Margin="0,5,0,0">
-                                <DockPanel Margin="0,0,10,0">
-                                    <TextBlock Text="기준 너비:" VerticalAlignment="Center" Width="70"/>
-                                    <TextBox Text="{Binding RefWindowWidth, UpdateSourceTrigger=PropertyChanged}"/>
-                                </DockPanel>
-                                <DockPanel>
-                                    <TextBlock Text="기준 높이:" VerticalAlignment="Center" Width="70"/>
-                                    <TextBox Text="{Binding RefWindowHeight, UpdateSourceTrigger=PropertyChanged}"/>
-                                </DockPanel>
-                            </UniformGrid>
-                        </StackPanel>
                     </StackPanel>
                 </GroupBox>
+
+                <!-- Normal Group Settings (Hidden for Start Group) -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                        <TextBlock Text="그룹 이름:" VerticalAlignment="Center" Margin="0,0,10,0" Width="80"/>
+                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+
+                    <!-- Target Window Context Settings (Moved from SequenceItem) -->
+                    <GroupBox Header="대상 윈도우 설정 (Global Context for this Group)" Margin="0,0,0,15" Padding="10" BorderBrush="#9C27B0">
+                        <StackPanel>
+                            <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                                <TextBlock Text="좌표 모드:" VerticalAlignment="Center" Width="100"/>
+                                <ComboBox ItemsSource="{Binding DataContext.CoordinateModes, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                          SelectedItem="{Binding CoordinateMode}"/>
+                            </DockPanel>
+
+                            <StackPanel>
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CoordinateMode}" Value="WindowRelative">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="100"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding ContextSearchMethod}"/>
+                                </DockPanel>
+
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="100"/>
+                                    <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
+                                            Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding .}"
+                                            ToolTip="목록 새로고침"/>
+                                    <ComboBox IsEditable="True" 
+                                              ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              Text="{Binding TargetProcessName, UpdateSourceTrigger=PropertyChanged}"
+                                              ToolTip="Process Name or Window Title"/>
+                                </DockPanel>
+
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="창 상태:" VerticalAlignment="Center" Width="100"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.WindowControlStates, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding ContextWindowState}"/>
+                                </DockPanel>
+
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="미발견 시 이동:" VerticalAlignment="Center" Width="100" Foreground="#C62828"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedValue="{Binding ProcessNotFoundJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              SelectedValuePath="Id"
+                                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                                </DockPanel>
+
+                                <UniformGrid Columns="2" Margin="0,5,0,0">
+                                    <DockPanel Margin="0,0,10,0">
+                                        <TextBlock Text="기준 너비:" VerticalAlignment="Center" Width="70"/>
+                                        <TextBox Text="{Binding RefWindowWidth, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                    <DockPanel>
+                                        <TextBlock Text="기준 높이:" VerticalAlignment="Center" Width="70"/>
+                                        <TextBox Text="{Binding RefWindowHeight, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DockPanel>
+                                </UniformGrid>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
             </StackPanel>
 
             <!-- 2. Step Editor (Visible when SelectedSequence != null) -->

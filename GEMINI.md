@@ -20,6 +20,7 @@
   2. 실행 엔진(`MacroEngineService`)은 평탄화된 리스트를 요구하므로, 실행 시점에 설정을 주입하고 변환(`DashboardViewModel`)해야 함.
   3. 흐름 제어(Jump) 시 '이름'이 아닌 `SuccessJumpId` 등 Guid 기반의 ID를 우선 사용하여 바인딩의 안정성을 확보할 것.
   4. UI 갱신 시 `JumpTargets` 컬렉션이 `Clear()` 되면 ComboBox 바인딩이 끊길 수 있으므로, 대량 로드(`LoadData`) 시에는 플래그를 사용하여 갱신을 제어해야 함.
+  5. **매크로 진입점**: 레시피 최상단에는 항상 `IsStartGroup`이 활성화된 **🏁 START** 그룹이 존재해야 하며, 이는 삭제나 이동이 불가능한 고정 진입점 역할을 함. 실제 실행 시작 위치는 이 그룹의 `StartJumpId`를 통해 결정됨.
 --- 
 - `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
 - `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

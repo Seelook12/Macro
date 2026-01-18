@@ -199,9 +199,15 @@ namespace Macro.ViewModels
 
             // Initialize Commands
             AddGroupCommand = ReactiveCommand.Create(AddGroup);
-            RemoveGroupCommand = ReactiveCommand.Create(RemoveGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
             
-            AddSequenceCommand = ReactiveCommand.Create(AddSequence, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+            // [Modified] Start Group 삭제 방지
+            var canRemoveGroup = this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null && !g.IsStartGroup);
+            RemoveGroupCommand = ReactiveCommand.Create(RemoveGroup, canRemoveGroup);
+            
+            // [Modified] Start Group에 스텝 추가 방지
+            var canAddSequence = this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null && !g.IsStartGroup);
+            AddSequenceCommand = ReactiveCommand.Create(AddSequence, canAddSequence);
+
             RemoveSequenceCommand = ReactiveCommand.Create(RemoveSequence, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item != null));
             
             SaveCommand = ReactiveCommand.CreateFromTask(SaveSequencesAsync);
@@ -219,7 +225,8 @@ namespace Macro.ViewModels
 
             PasteGroupCommand = ReactiveCommand.Create(PasteGroup);
 
-            DuplicateGroupCommand = ReactiveCommand.Create(DuplicateGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+            // [Modified] Start Group 복제 방지
+            DuplicateGroupCommand = ReactiveCommand.Create(DuplicateGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null && !g.IsStartGroup));
 
             AddSwitchCaseCommand = ReactiveCommand.Create<SwitchCaseCondition>(cond => 
             {
@@ -621,10 +628,12 @@ namespace Macro.ViewModels
             {
                 string groupTargetId = group.Items.Count > 0 ? group.Items[0].Id.ToString() : string.Empty;
                 
+                string groupIcon = group.IsStartGroup ? "🏁" : "📁";
+
                 JumpTargets.Add(new JumpTargetViewModel 
                 { 
                     Id = groupTargetId, 
-                    DisplayName = $"📁 {group.Name}", 
+                    DisplayName = $"{groupIcon} {group.Name}", 
                     IsGroup = true 
                 });
 
@@ -696,8 +705,14 @@ namespace Macro.ViewModels
                             {
                                 // 1. Try Loading as Group List (New Format)
                                 var loadedGroups = JsonSerializer.Deserialize<List<SequenceGroup>>(json, options);
-                                if (loadedGroups != null && loadedGroups.Count > 0 && loadedGroups[0].Items != null)
+                                if (loadedGroups != null && loadedGroups.Count > 0)
                                 {
+                                    // 첫 번째 요소가 Start Group인지 확인 (JSON 필드 확인)
+                                    // 주의: 이전 버전 파일에는 IsStartGroup 필드가 없으므로 false임.
+                                    // 마이그레이션: 첫 번째 그룹 이름이 "START"이면 Start Group으로 간주? 
+                                    // 아니면 무조건 맨 앞에 새로 추가? -> 새로 추가하는 게 안전함 (기존 로직 보존)
+                                    
+                                    // 만약 로드된 첫 번째 그룹이 이미 IsStartGroup=true라면 유지.
                                     foreach (var g in loadedGroups) Groups.Add(g);
                                 }
                                 else
@@ -715,7 +730,6 @@ namespace Macro.ViewModels
                                     {
                                         var defaultGroup = new SequenceGroup { Name = "Default Group" };
                                         
-                                        // 첫 번째 아이템의 설정을 그룹 설정으로 승격 (마이그레이션)
                                         if (loadedItems.Count > 0)
                                         {
                                             var first = loadedItems[0];
@@ -745,6 +759,18 @@ namespace Macro.ViewModels
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Failed to load recipe: {ex.Message}");
+                }
+
+                // [Ensure Start Group]
+                if (Groups.Count == 0 || !Groups[0].IsStartGroup)
+                {
+                    var startGroup = new SequenceGroup { Name = "START", IsStartGroup = true };
+                    Groups.Insert(0, startGroup);
+                }
+                else if (Groups.Count > 0 && Groups[0].IsStartGroup)
+                {
+                     // 이름 강제 고정 (선택 사항)
+                     Groups[0].Name = "START";
                 }
                 
                 LoadVariables();
@@ -1105,13 +1131,18 @@ namespace Macro.ViewModels
 
         private void MoveGroupUp(SequenceGroup group)
         {
+            if (group.IsStartGroup) return;
+
             int index = Groups.IndexOf(group);
-            if (index > 0) Groups.Move(index, index - 1);
+            // Index 1 (after Start Group) cannot move up to 0
+            if (index > 1) Groups.Move(index, index - 1);
             // Move는 CollectionChanged 발생함
         }
 
         private void MoveGroupDown(SequenceGroup group)
         {
+            if (group.IsStartGroup) return;
+
             int index = Groups.IndexOf(group);
             if (index < Groups.Count - 1) Groups.Move(index, index + 1);
             // Move는 CollectionChanged 발생함

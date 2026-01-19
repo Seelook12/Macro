@@ -26,6 +26,7 @@ namespace Macro.ViewModels
         private SequenceItem? _selectedSequence;
         private string _currentRecipeName = "No Recipe Selected";
         private bool _isLoading;
+        private bool _isUpdatingGroupTargets; // [Fix] Flag to prevent binding issues during list update
         private bool _isVariableManagerOpen; // Variable Manager Overlay Control
         
         // ComboBox Lists
@@ -52,6 +53,70 @@ namespace Macro.ViewModels
         }
 
         public ObservableCollection<JumpTargetViewModel> JumpTargets { get; } = new ObservableCollection<JumpTargetViewModel>();
+        
+        // [Group Jump Targets]
+        private readonly ObservableCollection<JumpTargetViewModel> _availableGroupEntryTargets = new ObservableCollection<JumpTargetViewModel>();
+        public ObservableCollection<JumpTargetViewModel> AvailableGroupEntryTargets => _availableGroupEntryTargets;
+
+        private readonly ObservableCollection<JumpTargetViewModel> _availableGroupExitTargets = new ObservableCollection<JumpTargetViewModel>();
+        public ObservableCollection<JumpTargetViewModel> AvailableGroupExitTargets => _availableGroupExitTargets;
+
+        public string SelectedGroupEntryJumpId
+        {
+            get
+            {
+                if (SelectedGroup != null)
+                {
+                    var startStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupStart);
+                    return startStep?.SuccessJumpId ?? string.Empty;
+                }
+                return string.Empty;
+            }
+            set
+            {
+                // [Fix] Prevent null/empty assignment during list refresh
+                if (_isUpdatingGroupTargets) return;
+
+                if (SelectedGroup != null)
+                {
+                    var startStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupStart);
+                    if (startStep != null && startStep.SuccessJumpId != value)
+                    {
+                        startStep.SuccessJumpId = value;
+                        this.RaisePropertyChanged();
+                    }
+                }
+            }
+        }
+
+        public string SelectedGroupExitJumpId
+        {
+            get
+            {
+                if (SelectedGroup != null)
+                {
+                    var endStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
+                    return endStep?.SuccessJumpId ?? string.Empty;
+                }
+                return string.Empty;
+            }
+            set
+            {
+                // [Fix] Prevent null/empty assignment during list refresh
+                if (_isUpdatingGroupTargets) return;
+
+                if (SelectedGroup != null)
+                {
+                    var endStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
+                    if (endStep != null && endStep.SuccessJumpId != value)
+                    {
+                        endStep.SuccessJumpId = value;
+                        this.RaisePropertyChanged();
+                    }
+                }
+            }
+        }
+
         public ObservableCollection<string> TargetList { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> ProcessList { get; } = new ObservableCollection<string>(); // New Collection
         public List<WindowControlState> WindowControlStates { get; } = new List<WindowControlState>
@@ -69,7 +134,8 @@ namespace Macro.ViewModels
         public List<CoordinateMode> CoordinateModes { get; } = new List<CoordinateMode>
         {
             CoordinateMode.Global,
-            CoordinateMode.WindowRelative
+            CoordinateMode.WindowRelative,
+            CoordinateMode.ParentRelative
         };
 
         public string CurrentRecipeName
@@ -197,6 +263,10 @@ namespace Macro.ViewModels
             // 초기 목록 생성
             UpdateJumpTargets();
 
+            // [New] 선택된 그룹 변경 시 그룹 전용 점프 타겟 갱신
+            this.WhenAnyValue(x => x.SelectedGroup)
+                .Subscribe(_ => UpdateGroupJumpTargets());
+
             // Initialize Commands
             AddGroupCommand = ReactiveCommand.Create(AddGroup);
             
@@ -221,7 +291,8 @@ namespace Macro.ViewModels
             CopySequenceCommand = ReactiveCommand.Create(CopySequence, this.WhenAnyValue(x => x.SelectedSequence, (SequenceItem? item) => item != null));
             PasteSequenceCommand = ReactiveCommand.Create(PasteSequence, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
 
-            CopyGroupCommand = ReactiveCommand.Create(CopyGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null));
+            // [Modified] Start Group 복사 방지
+            CopyGroupCommand = ReactiveCommand.Create(CopyGroup, this.WhenAnyValue(x => x.SelectedGroup, (SequenceGroup? g) => g != null && !g.IsStartGroup));
 
             PasteGroupCommand = ReactiveCommand.Create(PasteGroup);
 
@@ -607,15 +678,158 @@ namespace Macro.ViewModels
 
         #region Logic Methods
 
+        private void UpdateGroupJumpTargets()
+        {
+            _isUpdatingGroupTargets = true; // [Start Guard]
+            
+            try
+            {
+                // Clear existing lists
+                AvailableGroupEntryTargets.Clear();
+                AvailableGroupExitTargets.Clear();
+
+                if (SelectedGroup == null)
+                {
+                    return;
+                }
+
+                // 1. Entry Targets (Internal Nodes)
+                foreach (var node in SelectedGroup.Nodes)
+                {
+                    if (node is SequenceItem item)
+                    {
+                        if (!item.IsGroupStart && !item.IsGroupEnd)
+                        {
+                            AvailableGroupEntryTargets.Add(new JumpTargetViewModel
+                            {
+                                Id = item.Id.ToString(),
+                                DisplayName = item.Name,
+                                IsGroup = false
+                            });
+                        }
+                    }
+                    else if (node is SequenceGroup subGroup)
+                    {
+                        // Add SubGroup as a target
+                        var startNode = subGroup.Nodes.FirstOrDefault();
+                        if (startNode != null)
+                        {
+                            AvailableGroupEntryTargets.Add(new JumpTargetViewModel
+                            {
+                                 Id = startNode.Id.ToString(),
+                                 DisplayName = $"📁 {subGroup.Name}",
+                                 IsGroup = true
+                            });
+                        }
+                    }
+                }
+
+                // 2. Exit Targets (Other Groups)
+                AvailableGroupExitTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
+                
+                foreach (var group in Groups)
+                {
+                    TraverseGroupsForExitTargets(group, AvailableGroupExitTargets);
+                }
+            }
+            finally
+            {
+                _isUpdatingGroupTargets = false; // [End Guard]
+            }
+
+            // [Fix] Force UI to re-bind to the model's value
+            RxApp.MainThreadScheduler.Schedule(() =>
+            {
+                this.RaisePropertyChanged(nameof(SelectedGroupEntryJumpId));
+                this.RaisePropertyChanged(nameof(SelectedGroupExitJumpId));
+            });
+        }
+
+        private void TraverseGroupsForExitTargets(SequenceGroup group, ObservableCollection<JumpTargetViewModel> targetList)
+        {
+            // 1. 목록 추가 (자신 제외, StartGroup 제외)
+            if (group != SelectedGroup && !group.IsStartGroup && group.Nodes.Count > 0)
+            {
+                var startNode = group.Nodes.FirstOrDefault();
+                if (startNode != null)
+                {
+                     targetList.Add(new JumpTargetViewModel
+                     {
+                         Id = startNode.Id.ToString(),
+                         DisplayName = $"📁 {group.Name}",
+                         IsGroup = true
+                     });
+                }
+            }
+            
+            // 2. 자식 탐색 (자신이어도 자식은 탐색해야 함)
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceGroup subGroup)
+                {
+                    TraverseGroupsForExitTargets(subGroup, targetList);
+                }
+            }
+        }
+
+        private void TraverseGroupForJumpTargets(SequenceGroup group, SequenceGroup? currentGroup, bool showAll, bool isCurrentGroupEnd, int depth)
+        {
+            bool isSameGroup = currentGroup == group;
+            string indent = new string(' ', depth * 3);
+            string groupIcon = group.IsStartGroup ? "🏁" : "📁";
+
+            bool showGroupHeader = showAll || isSameGroup || (isCurrentGroupEnd && group.Nodes.Count > 0);
+
+            if (showGroupHeader && group.Nodes.Count > 0)
+            {
+                 var firstNode = group.Nodes.FirstOrDefault();
+                 if (firstNode != null)
+                 {
+                     JumpTargets.Add(new JumpTargetViewModel 
+                     { 
+                        Id = firstNode.Id.ToString(), 
+                        DisplayName = $"{indent}{groupIcon} {group.Name}", 
+                        IsGroup = true 
+                     });
+                 }
+            }
+
+                        // 그룹 탐색
+                        foreach(var node in group.Nodes)
+                        {
+                            if (node is SequenceItem item)
+                            {
+                                // 현재 그룹(또는 showAll)일 때만 스텝 표시
+                                if (showAll || isSameGroup)
+                                {
+                                    if (!string.IsNullOrEmpty(item.Name))
+                                    {
+                                        string displayName;
+                                        
+                                        if (item.IsGroupEnd) displayName = "(Finish Group)";
+                                        else if (item.IsGroupStart) displayName = "(Restart Group)";
+                                        else displayName = $"{indent}   📄 {item.Name}";
+            
+                                        JumpTargets.Add(new JumpTargetViewModel 
+                                        {
+                                            Id = item.Id.ToString(), 
+                                            DisplayName = displayName, 
+                                            IsGroup = false 
+                                        });
+                                    }
+                                }
+                            }
+                            else if (node is SequenceGroup subGroup)
+                            {
+                                // 하위 그룹은 항상 탐색 (재귀 내부에서 조건 검사)
+                                TraverseGroupForJumpTargets(subGroup, currentGroup, showAll, isCurrentGroupEnd, depth + 1);
+                            }
+                        }
+                    }
         private void UpdateJumpTargets()
         {
             if (_isLoading) return;
 
-            // 기존 선택된 ID 저장 (선택 복원 시도)
-            // 하지만 View 바인딩이 TwoWay라서 Clear() 시 null이 되어버리는 문제가 있으므로
-            // 사실상 Clear()를 피하는 게 상책이나, ObservableCollection에서 부분 업데이트는 복잡함.
-            // 일단 재생성하되, View에서 바인딩이 끊기지 않도록 하는 것은 NotifyTypeChanges에서 호출을 뺀 것으로 해결됨.
-            
             JumpTargets.Clear();
             
             // 1. System Options
@@ -623,32 +837,18 @@ namespace Macro.ViewModels
             JumpTargets.Add(new JumpTargetViewModel { Id = "(Ignore & Continue)", DisplayName = "(Ignore & Continue)", IsGroup = false });
             JumpTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
 
-            // 2. Groups and Items
+            // 현재 컨텍스트 파악
+            var currentItem = SelectedSequence;
+            var currentGroup = SelectedGroup ?? FindParentGroup(currentItem);
+
+            // 필터링 로직
+            bool showAll = currentItem == null || currentGroup == null;
+            bool isCurrentGroupEnd = currentItem != null && currentItem.IsGroupEnd;
+
+            // 2. Groups and Items (Recursive)
             foreach (var group in Groups)
             {
-                string groupTargetId = group.Items.Count > 0 ? group.Items[0].Id.ToString() : string.Empty;
-                
-                string groupIcon = group.IsStartGroup ? "🏁" : "📁";
-
-                JumpTargets.Add(new JumpTargetViewModel 
-                { 
-                    Id = groupTargetId, 
-                    DisplayName = $"{groupIcon} {group.Name}", 
-                    IsGroup = true 
-                });
-
-                foreach(var item in group.Items)
-                {
-                    if (!string.IsNullOrEmpty(item.Name))
-                    {
-                        JumpTargets.Add(new JumpTargetViewModel 
-                        { 
-                            Id = item.Id.ToString(), 
-                            DisplayName = $"   📄 {item.Name}", 
-                            IsGroup = false 
-                        });
-                    }
-                }
+                TraverseGroupForJumpTargets(group, currentGroup, showAll, isCurrentGroupEnd, 0);
             }
         }
 
@@ -707,13 +907,11 @@ namespace Macro.ViewModels
                                 var loadedGroups = JsonSerializer.Deserialize<List<SequenceGroup>>(json, options);
                                 if (loadedGroups != null && loadedGroups.Count > 0)
                                 {
-                                    // 첫 번째 요소가 Start Group인지 확인 (JSON 필드 확인)
-                                    // 주의: 이전 버전 파일에는 IsStartGroup 필드가 없으므로 false임.
-                                    // 마이그레이션: 첫 번째 그룹 이름이 "START"이면 Start Group으로 간주? 
-                                    // 아니면 무조건 맨 앞에 새로 추가? -> 새로 추가하는 게 안전함 (기존 로직 보존)
-                                    
-                                    // 만약 로드된 첫 번째 그룹이 이미 IsStartGroup=true라면 유지.
-                                    foreach (var g in loadedGroups) Groups.Add(g);
+                                    foreach (var g in loadedGroups)
+                                    {
+                                        EnsureGroupStructure(g); // Migration for legacy groups
+                                        Groups.Add(g);
+                                    }
                                 }
                                 else
                                 {
@@ -730,6 +928,9 @@ namespace Macro.ViewModels
                                     {
                                         var defaultGroup = new SequenceGroup { Name = "Default Group" };
                                         
+                                        // Add Start
+                                        defaultGroup.Nodes.Add(new SequenceItem(new IdleAction()) { Name = "Start", IsGroupStart = true, IsEnabled = true });
+
                                         if (loadedItems.Count > 0)
                                         {
                                             var first = loadedItems[0];
@@ -743,8 +944,12 @@ namespace Macro.ViewModels
 
                                         foreach (var item in loadedItems)
                                         {
-                                            defaultGroup.Items.Add(item);
+                                            defaultGroup.Nodes.Add(item);
                                         }
+
+                                        // Add End
+                                        defaultGroup.Nodes.Add(new SequenceItem(new IdleAction()) { Name = "End", IsGroupEnd = true, IsEnabled = true });
+
                                         Groups.Add(defaultGroup);
                                     }
                                 }
@@ -769,16 +974,108 @@ namespace Macro.ViewModels
                 }
                 else if (Groups.Count > 0 && Groups[0].IsStartGroup)
                 {
-                     // 이름 강제 고정 (선택 사항)
+                     // 이름 강제 고정
                      Groups[0].Name = "START";
                 }
                 
+                // [Sanitize] ID 중복 검사 및 수정
+                SanitizeLoadedData();
+
                 LoadVariables();
             }
             finally
             {
                 _isLoading = false;
                 UpdateJumpTargets();
+                UpdateGroupJumpTargets();
+            }
+        }
+
+        private void SanitizeLoadedData()
+        {
+            var seenIds = new HashSet<string>();
+            
+            // 1. Traverse all groups to find duplicates
+            foreach (var group in Groups)
+            {
+                SanitizeGroupIdsRecursive(group, seenIds);
+            }
+        }
+
+        private void SanitizeGroupIdsRecursive(SequenceGroup group, HashSet<string> seenIds)
+        {
+            // 그룹 자체 ID 체크는 생략 (ISequenceTreeNode.Id는 get-only이며 로드 시 자동 생성됨)
+            // 중요한 건 Item들의 ID임.
+
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceItem item)
+                {
+                    string id = item.Id.ToString();
+                    if (seenIds.Contains(id))
+                    {
+                        // 중복 발견! 새 ID 발급
+                        item.ResetId();
+                        string newId = item.Id.ToString();
+                        
+                        // 현재 그룹 내에서 이 아이템을 참조하던 점프들을 갱신 (Local Scope Fix)
+                        UpdateJumpReferencesInGroup(group, id, newId);
+                    }
+                    else
+                    {
+                        seenIds.Add(id);
+                    }
+                }
+                else if (node is SequenceGroup subGroup)
+                {
+                    SanitizeGroupIdsRecursive(subGroup, seenIds);
+                }
+            }
+        }
+
+        private void UpdateJumpReferencesInGroup(SequenceGroup group, string oldId, string newId)
+        {
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceItem item)
+                {
+                    if (item.SuccessJumpId == oldId) item.SuccessJumpId = newId;
+                    if (item.PreCondition?.FailJumpId == oldId) item.PreCondition.FailJumpId = newId;
+                    if (item.Action?.FailJumpId == oldId) item.Action.FailJumpId = newId;
+                    if (item.PostCondition?.FailJumpId == oldId) item.PostCondition.FailJumpId = newId;
+                }
+                // 서브 그룹 내부까지는 굳이 안 뒤져도 됨 (보통 같은 레벨이나 부모-자식 간 참조)
+                // 하지만 안전을 위해... 아님.
+                // End 스텝 중복일 경우, 보통 같은 그룹 내의 형제들이 End를 바라봄.
+                // 따라서 현재 그룹(group.Nodes)만 뒤져도 충분함.
+            }
+        }
+
+        private void EnsureGroupStructure(SequenceGroup group)
+        {
+            if (group.IsStartGroup) return; // START group uses different logic (StartJumpId)
+
+            // Check recursive for subgroups
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceGroup subGroup)
+                {
+                    EnsureGroupStructure(subGroup);
+                }
+            }
+
+            // Ensure Start Node
+            if (!group.Nodes.OfType<SequenceItem>().Any(i => i.IsGroupStart))
+            {
+                var startStep = new SequenceItem(new IdleAction()) { Name = "Start", IsGroupStart = true, IsEnabled = true };
+                group.Nodes.Insert(0, startStep);
+            }
+
+            // Ensure End Node
+            if (!group.Nodes.OfType<SequenceItem>().Any(i => i.IsGroupEnd))
+            {
+                var endStep = new SequenceItem(new IdleAction()) { Name = "End", IsGroupEnd = true, IsEnabled = true };
+                group.Nodes.Add(endStep);
             }
         }
 
@@ -798,11 +1095,7 @@ namespace Macro.ViewModels
                 {
                     foreach (var group in Groups)
                     {
-                        foreach (var item in group.Items)
-                        {
-                            ConvertPathToRelative(item.PreCondition, recipeDir);
-                            ConvertPathToRelative(item.PostCondition, recipeDir);
-                        }
+                        ConvertPathRecursive(group, recipeDir);
                     }
                 }
 
@@ -816,6 +1109,22 @@ namespace Macro.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to save recipe: {ex.Message}");
+            }
+        }
+
+        private void ConvertPathRecursive(SequenceGroup group, string baseDir)
+        {
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceItem item)
+                {
+                    ConvertPathToRelative(item.PreCondition, baseDir);
+                    ConvertPathToRelative(item.PostCondition, baseDir);
+                }
+                else if (node is SequenceGroup subGroup)
+                {
+                    ConvertPathRecursive(subGroup, baseDir);
+                }
             }
         }
 
@@ -885,10 +1194,27 @@ namespace Macro.ViewModels
 
         // --- Helper Methods ---
 
-        private SequenceGroup? FindParentGroup(SequenceItem? item)
+        public SequenceGroup? FindParentGroup(ISequenceTreeNode? item)
         {
             if (item == null) return null;
-            return Groups.FirstOrDefault(g => g.Items.Contains(item));
+            return FindParentGroupRecursive(Groups, item);
+        }
+
+        private SequenceGroup? FindParentGroupRecursive(IEnumerable<ISequenceTreeNode> nodes, ISequenceTreeNode target)
+        {
+            foreach (var node in nodes)
+            {
+                if (node is SequenceGroup group)
+                {
+                    // Nodes 컬렉션에서 직접 찾기
+                    if (group.Nodes.Contains(target)) return group;
+                    
+                    // 재귀 검색
+                    var found = FindParentGroupRecursive(group.Nodes, target);
+                    if (found != null) return found;
+                }
+            }
+            return null;
         }
 
         private void NotifyTypeChanges()
@@ -896,8 +1222,8 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
             this.RaisePropertyChanged(nameof(SelectedActionType));
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
-            // JumpTarget 업데이트 제거 (선택 변경 시 목록 재생성 방지)
-            // UpdateJumpTargets(); 
+            // JumpTarget 업데이트 (선택된 스텝에 따라 목록 필터링)
+            UpdateJumpTargets(); 
         }
 
         private string GetConditionType(IMacroCondition? condition)
@@ -993,20 +1319,56 @@ namespace Macro.ViewModels
 
         private void AddGroup()
         {
-            var newGroup = new SequenceGroup { Name = $"Group {Groups.Count + 1}" };
-            Groups.Add(newGroup);
+            var newGroup = new SequenceGroup { Name = $"Group {Guid.NewGuid().ToString().Substring(0, 4)}" };
+            
+            // Add Start Step
+            var startStep = new SequenceItem(new IdleAction())
+            {
+                Name = "Start",
+                IsGroupStart = true,
+                IsEnabled = true
+            };
+            newGroup.Nodes.Add(startStep);
+
+            // Add End Step
+            var endStep = new SequenceItem(new IdleAction())
+            {
+                Name = "End",
+                IsGroupEnd = true,
+                IsEnabled = true
+            };
+            newGroup.Nodes.Add(endStep);
+
+            if (SelectedGroup != null)
+            {
+                SelectedGroup.Nodes.Add(newGroup);
+            }
+            else
+            {
+                Groups.Add(newGroup);
+            }
+
             SelectedGroup = newGroup;
-            SelectedSequence = null;
-            // Groups 컬렉션이 변경되므로 생성자에서 구독한 핸들러에 의해 UpdateJumpTargets 호출됨
+            SelectedSequence = null; // 초기에는 스텝 선택 해제
         }
 
         private void RemoveGroup()
         {
             if (SelectedGroup != null)
             {
-                Groups.Remove(SelectedGroup);
+                if (Groups.Contains(SelectedGroup))
+                {
+                    Groups.Remove(SelectedGroup);
+                }
+                else
+                {
+                    var parent = FindParentGroup(SelectedGroup);
+                    if (parent != null)
+                    {
+                        parent.Nodes.Remove(SelectedGroup);
+                    }
+                }
                 SelectedGroup = null;
-                // Groups 컬렉션이 변경되므로 UpdateJumpTargets 호출됨
             }
         }
 
@@ -1017,13 +1379,14 @@ namespace Macro.ViewModels
             var newAction = new IdleAction();
             var newItem = new SequenceItem(newAction)
             {
-                Name = $"Step {SelectedGroup.Items.Count + 1}",
+                Name = $"Step {SelectedGroup.Nodes.OfType<SequenceItem>().Count() + 1}",
                 IsEnabled = true
             };
 
-            SelectedGroup.Items.Add(newItem);
+            SelectedGroup.Nodes.Add(newItem);
             SelectedSequence = newItem;
             UpdateJumpTargets(); // Items 변경 감지용
+            UpdateGroupJumpTargets();
         }
 
         private void SaveImageToRecipe(ImageMatchCondition condition, string sourcePath)
@@ -1080,10 +1443,23 @@ namespace Macro.ViewModels
         {
             foreach (var group in Groups)
             {
-                foreach (var seq in group.Items)
+                if (CheckGroupForImageRecursive(group, path, currentCondition)) return true;
+            }
+            return false;
+        }
+
+        private bool CheckGroupForImageRecursive(SequenceGroup group, string path, object currentCondition)
+        {
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceItem seq)
                 {
                     if (IsPathMatch(seq.PreCondition, path, currentCondition)) return true;
                     if (IsPathMatch(seq.PostCondition, path, currentCondition)) return true;
+                }
+                else if (node is SequenceGroup subGroup)
+                {
+                    if (CheckGroupForImageRecursive(subGroup, path, currentCondition)) return true;
                 }
             }
             return false;
@@ -1107,7 +1483,7 @@ namespace Macro.ViewModels
                 if (parentGroup != null)
                 {
                     var itemToRemove = SelectedSequence;
-                    parentGroup.Items.Remove(itemToRemove);
+                    parentGroup.Nodes.Remove(itemToRemove);
                     
                     if (itemToRemove.PreCondition is ImageMatchCondition preImg) 
                         DeleteImageIfOrphaned(preImg.ImagePath);
@@ -1116,6 +1492,7 @@ namespace Macro.ViewModels
 
                     SelectedSequence = null;
                     UpdateJumpTargets(); // Items 변경 감지용
+                    UpdateGroupJumpTargets();
                 }
             }
         }
@@ -1153,10 +1530,10 @@ namespace Macro.ViewModels
             var parentGroup = FindParentGroup(item);
             if (parentGroup != null)
             {
-                int index = parentGroup.Items.IndexOf(item);
+                int index = parentGroup.Nodes.IndexOf(item);
                 if (index > 0)
                 {
-                    parentGroup.Items.Move(index, index - 1);
+                    parentGroup.Nodes.Move(index, index - 1);
                     UpdateJumpTargets(); // 순서 변경 반영
                 }
             }
@@ -1167,10 +1544,10 @@ namespace Macro.ViewModels
             var parentGroup = FindParentGroup(item);
             if (parentGroup != null)
             {
-                int index = parentGroup.Items.IndexOf(item);
-                if (index < parentGroup.Items.Count - 1)
+                int index = parentGroup.Nodes.IndexOf(item);
+                if (index < parentGroup.Nodes.Count - 1)
                 {
-                    parentGroup.Items.Move(index, index + 1);
+                    parentGroup.Nodes.Move(index, index + 1);
                     UpdateJumpTargets(); // 순서 변경 반영
                 }
             }
@@ -1219,44 +1596,24 @@ namespace Macro.ViewModels
                 {
                     newGroup.Name += " (Copy)";
                     
-                    // 1. ID Mapping Table 생성 (Old ID -> New ID)
                     var idMap = new Dictionary<string, string>();
                     
-                    foreach (var item in newGroup.Items)
+                    // 1. Recursive ID Remapping
+                    RemapGroupIdsRecursive(newGroup, idMap);
+
+                    // 2. Recursive Jump Correction
+                    UpdateGroupJumpsRecursive(newGroup, idMap);
+
+                    // Add to selected group if possible, else root
+                    if (SelectedGroup != null)
                     {
-                        var oldId = item.Id.ToString();
-                        item.ResetId(); // 새 ID 발급
-                        var newId = item.Id.ToString();
-                        
-                        if (!idMap.ContainsKey(oldId))
-                        {
-                            idMap[oldId] = newId;
-                        }
+                        SelectedGroup.Nodes.Add(newGroup);
+                    }
+                    else
+                    {
+                        Groups.Add(newGroup);
                     }
 
-                    // 2. 내부 점프 참조 보정 (Smart Remapping)
-                    // 그룹 내의 아이템끼리 연결된 점프만 새 ID로 교체하고, 외부 점프는 유지.
-                    foreach (var item in newGroup.Items)
-                    {
-                        // Success Jump
-                        if (!string.IsNullOrEmpty(item.SuccessJumpId) && idMap.ContainsKey(item.SuccessJumpId))
-                        {
-                            item.SuccessJumpId = idMap[item.SuccessJumpId];
-                        }
-
-                        // Components Fail Jump
-                        UpdateComponentJumpId(item.PreCondition, idMap);
-                        UpdateComponentJumpId(item.Action, idMap);
-                        UpdateComponentJumpId(item.PostCondition, idMap);
-                    }
-                    
-                    // 그룹 레벨의 점프 보정 (ProcessNotFoundJumpId)
-                    if (!string.IsNullOrEmpty(newGroup.ProcessNotFoundJumpId) && idMap.ContainsKey(newGroup.ProcessNotFoundJumpId))
-                    {
-                        newGroup.ProcessNotFoundJumpId = idMap[newGroup.ProcessNotFoundJumpId];
-                    }
-
-                    Groups.Add(newGroup);
                     SelectedGroup = newGroup;
                     SelectedSequence = null;
                 }
@@ -1264,6 +1621,54 @@ namespace Macro.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Group Paste failed: {ex.Message}");
+            }
+        }
+
+        private void RemapGroupIdsRecursive(SequenceGroup group, Dictionary<string, string> idMap)
+        {
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceItem item)
+                {
+                    var oldId = item.Id.ToString();
+                    item.ResetId();
+                    var newId = item.Id.ToString();
+                    if (!idMap.ContainsKey(oldId)) idMap[oldId] = newId;
+                }
+                else if (node is SequenceGroup subGroup)
+                {
+                    RemapGroupIdsRecursive(subGroup, idMap);
+                }
+            }
+        }
+
+        private void UpdateGroupJumpsRecursive(SequenceGroup group, Dictionary<string, string> idMap)
+        {
+            if (!string.IsNullOrEmpty(group.ProcessNotFoundJumpId) && idMap.ContainsKey(group.ProcessNotFoundJumpId))
+            {
+                group.ProcessNotFoundJumpId = idMap[group.ProcessNotFoundJumpId];
+            }
+            if (!string.IsNullOrEmpty(group.StartJumpId) && idMap.ContainsKey(group.StartJumpId))
+            {
+                group.StartJumpId = idMap[group.StartJumpId];
+            }
+
+            foreach (var node in group.Nodes)
+            {
+                if (node is SequenceItem item)
+                {
+                    if (!string.IsNullOrEmpty(item.SuccessJumpId) && idMap.ContainsKey(item.SuccessJumpId))
+                    {
+                        item.SuccessJumpId = idMap[item.SuccessJumpId];
+                    }
+                    UpdateComponentJumpId(item.PreCondition, idMap);
+                    UpdateComponentJumpId(item.Action, idMap);
+                    UpdateComponentJumpId(item.PostCondition, idMap);
+                }
+                else if (node is SequenceGroup subGroup)
+                {
+                    UpdateGroupJumpsRecursive(subGroup, idMap);
+                }
             }
         }
 
@@ -1309,23 +1714,31 @@ namespace Macro.ViewModels
                     newItem.ResetId();
                     newItem.Name += " (Copy)";
 
+                    // [Smart Jump Fix]
+                    // 붙여넣기 한 스텝의 점프 대상이 현재 그룹 내부에 없다면(다른 그룹의 스텝이라면), 
+                    // 엉뚱한 곳으로 점프하는 것을 막기 위해 초기화합니다.
+                    if (SelectedGroup != null)
+                    {
+                        ValidateAndClearJumpId(newItem, SelectedGroup);
+                    }
+
                     if (SelectedSequence != null)
                     {
                         var parent = FindParentGroup(SelectedSequence);
                         if (parent == SelectedGroup)
                         {
-                            int index = parent.Items.IndexOf(SelectedSequence);
-                            if (index >= 0) parent.Items.Insert(index + 1, newItem);
-                            else parent.Items.Add(newItem);
+                            int index = parent.Nodes.IndexOf(SelectedSequence);
+                            if (index >= 0) parent.Nodes.Insert(index + 1, newItem);
+                            else parent.Nodes.Add(newItem);
                         }
                         else
                         {
-                            SelectedGroup.Items.Add(newItem);
+                            SelectedGroup.Nodes.Add(newItem);
                         }
                     }
                     else
                     {
-                        SelectedGroup.Items.Add(newItem);
+                        SelectedGroup.Nodes.Add(newItem);
                     }
                     
                     SelectedSequence = newItem;
@@ -1336,6 +1749,49 @@ namespace Macro.ViewModels
             {
                 System.Diagnostics.Debug.WriteLine($"Paste failed: {ex.Message}");
             }
+        }
+
+        private void ValidateAndClearJumpId(SequenceItem item, SequenceGroup currentGroup)
+        {
+            if (!string.IsNullOrEmpty(item.SuccessJumpId) && !IsIdInGroupRecursive(currentGroup, item.SuccessJumpId))
+            {
+                item.SuccessJumpId = string.Empty;
+            }
+            
+            ValidateConditionJump(item.PreCondition, currentGroup);
+            ValidateActionJump(item.Action, currentGroup);
+            ValidateConditionJump(item.PostCondition, currentGroup);
+        }
+
+        private void ValidateConditionJump(IMacroCondition? condition, SequenceGroup group)
+        {
+            if (condition == null) return;
+            if (!string.IsNullOrEmpty(condition.FailJumpId) && !IsIdInGroupRecursive(group, condition.FailJumpId))
+            {
+                condition.FailJumpId = string.Empty;
+            }
+        }
+
+        private void ValidateActionJump(IMacroAction? action, SequenceGroup group)
+        {
+            if (action == null) return;
+            if (!string.IsNullOrEmpty(action.FailJumpId) && !IsIdInGroupRecursive(group, action.FailJumpId))
+            {
+                action.FailJumpId = string.Empty;
+            }
+        }
+
+        private bool IsIdInGroupRecursive(SequenceGroup group, string id)
+        {
+            foreach (var node in group.Nodes)
+            {
+                if (node.Id.ToString() == id) return true;
+                if (node is SequenceGroup subGroup)
+                {
+                    if (IsIdInGroupRecursive(subGroup, id)) return true;
+                }
+            }
+            return false;
         }
 
         private (int X, int Y, int Width, int Height)? GetTargetWindowInfo(SequenceGroup group)

@@ -592,11 +592,19 @@
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="TreeViewItem">
                         <Setter Property="IsExpanded" Value="True"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsGroupStart}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsGroupEnd}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
                     </Style>
                 </TreeView.ItemContainerStyle>
                 
                 <TreeView.Resources>
-                    <HierarchicalDataTemplate DataType="{x:Type models:SequenceGroup}" ItemsSource="{Binding Items}">
+                    <HierarchicalDataTemplate DataType="{x:Type models:SequenceGroup}" ItemsSource="{Binding Nodes}">
                         <Grid Margin="0,2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -645,6 +653,19 @@
                     
                     <DataTemplate DataType="{x:Type models:SequenceItem}">
                         <Grid Margin="0,2">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsGroupStart}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsGroupEnd}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -677,7 +698,8 @@
                 <WrapPanel HorizontalAlignment="Right" Margin="0,0,0,5">
                     <Button Content="그룹 추가" Command="{Binding AddGroupCommand}" Padding="10,5" Margin="0,0,5,0" Background="#FFB74D"/>
                     <Button Content="그룹 삭제" Command="{Binding RemoveGroupCommand}" Padding="10,5" Margin="0,0,5,0"/>
-                    <Button Content="그룹 복사" Command="{Binding DuplicateGroupCommand}" Padding="10,5"/>
+                    <Button Content="그룹 복사" Command="{Binding CopyGroupCommand}" Padding="10,5" Margin="0,0,5,0"/>
+                    <Button Content="그룹 붙여넣기" Command="{Binding PasteGroupCommand}" Padding="10,5"/>
                 </WrapPanel>
                 <WrapPanel HorizontalAlignment="Right">
                     <Button Content="변수 관리" Command="{Binding OpenVariableManagerCommand}" Padding="10,5" Margin="0,0,5,0" Background="#E0E0E0"/>
@@ -780,6 +802,28 @@
                         <TextBlock Text="그룹 이름:" VerticalAlignment="Center" Margin="0,0,10,0" Width="80"/>
                         <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
                     </DockPanel>
+
+                    <!-- Group Flow Control -->
+                    <GroupBox Header="그룹 흐름 제어 (Flow Control)" Margin="0,0,0,15" Padding="10" BorderBrush="#FF9800">
+                        <StackPanel>
+                            <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                <TextBlock Text="시작 스텝 (Entry):" VerticalAlignment="Center" Width="110"/>
+                                <ComboBox ItemsSource="{Binding DataContext.AvailableGroupEntryTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          SelectedValue="{Binding DataContext.SelectedGroupEntryJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Id"
+                                          ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                          ToolTip="이 그룹 진입 시 처음 실행할 스텝"/>
+                            </DockPanel>
+                            <DockPanel LastChildFill="True">
+                                <TextBlock Text="종료 후 이동 (Next):" VerticalAlignment="Center" Width="110"/>
+                                <ComboBox ItemsSource="{Binding DataContext.AvailableGroupExitTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          SelectedValue="{Binding DataContext.SelectedGroupExitJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Id"
+                                          ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                          ToolTip="이 그룹의 실행이 끝나면 이동할 다음 그룹"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </GroupBox>
 
                     <!-- Target Window Context Settings (Moved from SequenceItem) -->
                     <GroupBox Header="대상 윈도우 설정 (Global Context for this Group)" Margin="0,0,0,15" Padding="10" BorderBrush="#9C27B0">

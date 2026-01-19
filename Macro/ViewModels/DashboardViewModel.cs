@@ -128,45 +128,7 @@ namespace Macro.ViewModels
                         {
                             foreach (var group in loadedGroups)
                             {
-                                // 1. Start Group 처리 (Dummy Init Item 생성)
-                                if (group.IsStartGroup)
-                                {
-                                    if (!string.IsNullOrEmpty(group.StartJumpId))
-                                    {
-                                        var initItem = new SequenceItem(new IdleAction { DelayTimeMs = 0 })
-                                        {
-                                            Name = "Initialize (Start)",
-                                            SuccessJumpId = group.StartJumpId
-                                        };
-                                        finalSequence.Add(initItem);
-                                    }
-                                    // Start Group의 Items는 무시 (규칙상 비어있어야 함)
-                                    continue;
-                                }
-
-                                // 2. 일반 그룹 처리
-                                if (!group.Items.Any()) continue;
-
-                                foreach (var item in group.Items)
-                                {
-                                    // Deep Clone Item (to avoid modifying original data if we were using shared memory, though here we just loaded from file)
-                                    // We can just use the item directly since we just loaded it, but we need to inject properties.
-                                    
-                                    // 1. Name Injection
-                                    item.Name = $"{group.Name}_{item.Name}";
-
-                                    // 2. Context Injection
-                                    item.CoordinateMode = group.CoordinateMode;
-                                    item.ContextSearchMethod = group.ContextSearchMethod;
-                                    item.TargetProcessName = group.TargetProcessName;
-                                    item.ContextWindowState = group.ContextWindowState;
-                                    item.ProcessNotFoundJumpName = group.ProcessNotFoundJumpName;
-                                    item.ProcessNotFoundJumpId = group.ProcessNotFoundJumpId;
-                                    item.RefWindowWidth = group.RefWindowWidth;
-                                    item.RefWindowHeight = group.RefWindowHeight;
-
-                                    finalSequence.Add(item);
-                                }
+                                FlattenNodeRecursive(group, finalSequence, null);
                             }
                         }
                         else
@@ -209,6 +171,61 @@ namespace Macro.ViewModels
             {
                 _engineService.Stop();
             }, canStop);
+        }
+
+        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext)
+        {
+            if (node is SequenceGroup group)
+            {
+                // [Inheritance Logic]
+                if (group.CoordinateMode == CoordinateMode.ParentRelative && parentGroupContext != null)
+                {
+                    group.CoordinateMode = parentGroupContext.CoordinateMode; // Resolve to actual mode (Global/WindowRelative)
+                    group.ContextSearchMethod = parentGroupContext.ContextSearchMethod;
+                    group.TargetProcessName = parentGroupContext.TargetProcessName;
+                    group.ContextWindowState = parentGroupContext.ContextWindowState;
+                    group.ProcessNotFoundJumpName = parentGroupContext.ProcessNotFoundJumpName;
+                    group.ProcessNotFoundJumpId = parentGroupContext.ProcessNotFoundJumpId;
+                    group.RefWindowWidth = parentGroupContext.RefWindowWidth;
+                    group.RefWindowHeight = parentGroupContext.RefWindowHeight;
+                }
+
+                if (group.IsStartGroup)
+                {
+                    if (!string.IsNullOrEmpty(group.StartJumpId))
+                    {
+                        var initItem = new SequenceItem(new IdleAction { DelayTimeMs = 0 })
+                        {
+                            Name = "Initialize (Start)",
+                            SuccessJumpId = group.StartJumpId
+                        };
+                        result.Add(initItem);
+                    }
+                    return;
+                }
+
+                foreach (var child in group.Nodes)
+                {
+                    FlattenNodeRecursive(child, result, group);
+                }
+            }
+            else if (node is SequenceItem item)
+            {
+                if (parentGroupContext != null)
+                {
+                    item.Name = $"{parentGroupContext.Name}_{item.Name}";
+                    
+                    item.CoordinateMode = parentGroupContext.CoordinateMode;
+                    item.ContextSearchMethod = parentGroupContext.ContextSearchMethod;
+                    item.TargetProcessName = parentGroupContext.TargetProcessName;
+                    item.ContextWindowState = parentGroupContext.ContextWindowState;
+                    item.ProcessNotFoundJumpName = parentGroupContext.ProcessNotFoundJumpName;
+                    item.ProcessNotFoundJumpId = parentGroupContext.ProcessNotFoundJumpId;
+                    item.RefWindowWidth = parentGroupContext.RefWindowWidth;
+                    item.RefWindowHeight = parentGroupContext.RefWindowHeight;
+                }
+                result.Add(item);
+            }
         }
     }
 }

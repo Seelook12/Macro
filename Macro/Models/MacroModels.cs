@@ -15,7 +15,8 @@ namespace Macro.Models
     public enum CoordinateMode
     {
         Global,
-        WindowRelative
+        WindowRelative,
+        ParentRelative
     }
 
     public interface ISupportCoordinateTransform
@@ -1068,7 +1069,16 @@ namespace Macro.Models
 
     #region SequenceItem
 
-    public class SequenceItem : ReactiveObject
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "NodeType")]
+    [JsonDerivedType(typeof(SequenceGroup), typeDiscriminator: "Group")]
+    [JsonDerivedType(typeof(SequenceItem), typeDiscriminator: "Item")]
+    public interface ISequenceTreeNode
+    {
+        Guid Id { get; }
+        string Name { get; set; }
+    }
+
+    public class SequenceItem : ReactiveObject, ISequenceTreeNode
     {
         private Guid _id = Guid.NewGuid();
         private string _name = string.Empty;
@@ -1094,6 +1104,10 @@ namespace Macro.Models
 
         private string _successJumpName = string.Empty;
         private string _successJumpId = string.Empty; // Guid string or special tag
+        
+        // Group Boundary Flags
+        private bool _isGroupStart = false;
+        private bool _isGroupEnd = false;
 
         public SequenceItem(IMacroAction action)
         {
@@ -1102,7 +1116,7 @@ namespace Macro.Models
 
         // JSON Deserialization을 위한 기본 생성자 (필요 시)
         [JsonConstructor]
-        public SequenceItem(Guid id, string name, bool isEnabled, IMacroCondition? preCondition, IMacroAction? action, IMacroCondition? postCondition, int retryCount = 0, int retryDelayMs = 500, int repeatCount = 1, string successJumpName = "", string successJumpId = "")
+        public SequenceItem(Guid id, string name, bool isEnabled, IMacroCondition? preCondition, IMacroAction? action, IMacroCondition? postCondition, int retryCount = 0, int retryDelayMs = 500, int repeatCount = 1, string successJumpName = "", string successJumpId = "", bool isGroupStart = false, bool isGroupEnd = false)
         {
              _id = id == Guid.Empty ? Guid.NewGuid() : id;
              _name = name;
@@ -1115,6 +1129,8 @@ namespace Macro.Models
              _repeatCount = repeatCount;
              _successJumpName = successJumpName;
              _successJumpId = successJumpId;
+             _isGroupStart = isGroupStart;
+             _isGroupEnd = isGroupEnd;
         }
 
         public Guid Id => _id;
@@ -1123,6 +1139,18 @@ namespace Macro.Models
         {
             get => _name;
             set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public bool IsGroupStart
+        {
+            get => _isGroupStart;
+            set => this.RaiseAndSetIfChanged(ref _isGroupStart, value);
+        }
+
+        public bool IsGroupEnd
+        {
+            get => _isGroupEnd;
+            set => this.RaiseAndSetIfChanged(ref _isGroupEnd, value);
         }
 
         public bool IsEnabled
@@ -1233,10 +1261,11 @@ namespace Macro.Models
         }
     }
 
-    public class SequenceGroup : ReactiveObject
+    public class SequenceGroup : ReactiveObject, ISequenceTreeNode
     {
         private string _name = "Group";
-        private ObservableCollection<SequenceItem> _items = new ObservableCollection<SequenceItem>();
+        private ObservableCollection<ISequenceTreeNode> _nodes = new ObservableCollection<ISequenceTreeNode>();
+        private ObservableCollection<SequenceItem>? _legacyItems;
 
         // Shared Context Fields
         private CoordinateMode _coordinateMode = CoordinateMode.Global;
@@ -1249,6 +1278,8 @@ namespace Macro.Models
         private int _refWindowHeight = 1080;
         private bool _isStartGroup = false;
         private string _startJumpId = string.Empty;
+
+        public Guid Id { get; } = Guid.NewGuid(); // ISequenceTreeNode requirement
 
         public string Name
         {
@@ -1268,10 +1299,29 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _startJumpId, value);
         }
 
-        public ObservableCollection<SequenceItem> Items
+        public ObservableCollection<ISequenceTreeNode> Nodes
         {
-            get => _items;
-            set => this.RaiseAndSetIfChanged(ref _items, value);
+            get => _nodes;
+            set => this.RaiseAndSetIfChanged(ref _nodes, value);
+        }
+
+        // Legacy Property for JSON Compatibility
+        public ObservableCollection<SequenceItem>? Items
+        {
+            get => _legacyItems;
+            set
+            {
+                _legacyItems = value;
+                if (_legacyItems != null && _legacyItems.Count > 0)
+                {
+                    // Migrate legacy items to Nodes
+                    foreach (var item in _legacyItems)
+                    {
+                        Nodes.Add(item);
+                    }
+                    _legacyItems.Clear(); 
+                }
+            }
         }
 
         public CoordinateMode CoordinateMode

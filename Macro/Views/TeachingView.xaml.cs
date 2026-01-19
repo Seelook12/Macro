@@ -222,15 +222,8 @@ namespace Macro.Views
             else if (e.NewValue is SequenceItem item)
             {
                 ViewModel.SelectedSequence = item;
-                // Find parent group
-                foreach (var g in ViewModel.Groups)
-                {
-                    if (g.Items.Contains(item))
-                    {
-                        ViewModel.SelectedGroup = g;
-                        break;
-                    }
-                }
+                // Find parent group using recursive helper
+                ViewModel.SelectedGroup = ViewModel.FindParentGroup(item);
             }
         }
     }

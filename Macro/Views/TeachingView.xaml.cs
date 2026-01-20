@@ -11,6 +11,7 @@ using Macro.Utils;
 using Macro.ViewModels;
 using ReactiveUI;
 using UserControl = System.Windows.Controls.UserControl;
+using ComboBox = System.Windows.Controls.ComboBox;
 
 namespace Macro.Views
 {
@@ -224,6 +225,26 @@ namespace Macro.Views
                 ViewModel.SelectedSequence = item;
                 // Find parent group using recursive helper
                 ViewModel.SelectedGroup = ViewModel.FindParentGroup(item);
+            }
+        }
+
+        private void OnComboBoxDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (sender is ComboBox comboBox)
+            {
+                DebugLogger.Log($"[View] ComboBox DataContextChanged. Old: {e.OldValue?.GetType().Name}, New: {e.NewValue?.GetType().Name}");
+                
+                // Manual binding update removed to avoid conflict with Proxy Property
+            }
+        }
+
+        private void OnComboBoxLoaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is ComboBox comboBox)
+            {
+                DebugLogger.Log($"[View] ComboBox Loaded. Initial SelectedValue: {comboBox.SelectedValue}");
+                
+                // Manual binding update removed to avoid conflict with Proxy Property
             }
         }
     }

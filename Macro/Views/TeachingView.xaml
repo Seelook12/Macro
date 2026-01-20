@@ -32,10 +32,10 @@
         </DataTemplate>
 
         <!-- ==================================================================== -->
-        <!-- [DataTemplates] Condition Models -->
+        <!-- [Global DataTemplates] Direct Binding (Used by MultiAction Children) -->
         <!-- ==================================================================== -->
         
-        <!-- 1. DelayCondition -->
+        <!-- 1. DelayCondition (Direct) -->
         <DataTemplate DataType="{x:Type models:DelayCondition}">
             <StackPanel Margin="5">
                 <Grid Margin="0,0,0,5">
@@ -53,12 +53,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 2. ImageMatchCondition -->
+        <!-- 2. ImageMatchCondition (Direct) -->
         <DataTemplate DataType="{x:Type models:ImageMatchCondition}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -175,12 +177,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 3. GrayChangeCondition -->
+        <!-- 3. GrayChangeCondition (Direct) -->
         <DataTemplate DataType="{x:Type models:GrayChangeCondition}">
             <StackPanel Margin="5">
                 <Grid Margin="0,0,0,5">
@@ -234,12 +238,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 4. VariableCompareCondition -->
+        <!-- 4. VariableCompareCondition (Direct) -->
         <DataTemplate DataType="{x:Type models:VariableCompareCondition}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -278,12 +284,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 5. SwitchCaseCondition -->
+        <!-- 5. SwitchCaseCondition (Direct) -->
         <DataTemplate DataType="{x:Type models:SwitchCaseCondition}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -318,7 +326,9 @@
                                           ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                           SelectedValue="{Binding JumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           SelectedValuePath="Id"
-                                          ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                                          ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                          DataContextChanged="OnComboBoxDataContextChanged"
+                                          Loaded="OnComboBoxLoaded"/>
 
                                 <Button Grid.Column="4" Content="-" Width="25" Margin="5,0,0,0" Background="#FFEBEE" Foreground="Red"
                                         Command="{Binding DataContext.RemoveSwitchCaseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -339,16 +349,18 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
         <!-- ==================================================================== -->
-        <!-- [DataTemplates] Action Models -->
+        <!-- [DataTemplates] Action Models (Direct) -->
         <!-- ==================================================================== -->
 
-        <!-- 1. IdleAction -->
+        <!-- 1. IdleAction (Direct) -->
         <DataTemplate DataType="{x:Type models:IdleAction}">
             <StackPanel Margin="5">
                 <Grid Margin="0,0,0,5">
@@ -366,12 +378,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 2. MouseClickAction -->
+        <!-- 2. MouseClickAction (Direct) -->
         <DataTemplate DataType="{x:Type models:MouseClickAction}">
             <StackPanel Margin="5">
                 <Grid Margin="0,0,0,5">
@@ -420,12 +434,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 3. KeyPressAction -->
+        <!-- 3. KeyPressAction (Direct) -->
         <DataTemplate DataType="{x:Type models:KeyPressAction}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -437,12 +453,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 3-1. VariableSetAction -->
+        <!-- 3-1. VariableSetAction (Direct) -->
         <DataTemplate DataType="{x:Type models:VariableSetAction}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -477,12 +495,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 4. WindowControlAction -->
+        <!-- 4. WindowControlAction (Direct) -->
         <DataTemplate DataType="{x:Type models:WindowControlAction}">
             <StackPanel Margin="5">
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -507,12 +527,14 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
 
-        <!-- 5. MultiAction -->
+        <!-- 5. MultiAction (Direct - Recursively uses Direct Templates) -->
         <DataTemplate DataType="{x:Type models:MultiAction}">
             <StackPanel Margin="5">
                 <TextBlock Text="복합 액션 (Multi-Step Action)" FontWeight="Bold" Foreground="#673AB7" Margin="0,0,0,5"/>
@@ -521,6 +543,11 @@
                     <StackPanel>
                         <!-- Sub-Actions List -->
                         <ItemsControl ItemsSource="{Binding Actions}">
+                            <ItemsControl.Resources>
+                                <!-- Force Direct Binding for children (Copy of Direct Templates) 
+                                     This ensures sub-actions bind to their OWN FailJumpId, not the Proxy Property. 
+                                     Since we are in Global Resources, the lookup works naturally. -->
+                            </ItemsControl.Resources>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="White" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="2" Margin="0,0,0,5" Padding="5">
@@ -532,7 +559,7 @@
                                                     CommandParameter="{Binding .}"
                                                     ToolTip="Remove this sub-action"/>
                                             
-                                            <!-- Action Content (Recursive DataTemplate) -->
+                                            <!-- Action Content -->
                                             <ContentControl Content="{Binding}"/>
                                         </DockPanel>
                                     </Border>
@@ -559,7 +586,9 @@
                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               SelectedValue="{Binding FailJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               SelectedValuePath="Id"
-                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                              DataContextChanged="OnComboBoxDataContextChanged"
+                              Loaded="OnComboBoxLoaded"/>
                 </DockPanel>
             </StackPanel>
         </DataTemplate>
@@ -574,6 +603,7 @@
 
         <!-- Left: TreeView List -->
         <Grid Grid.Column="0" Background="#F0F0F0">
+            <!-- ... (TreeView Logic Unchanged) ... -->
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -640,7 +670,6 @@
                                         </Style.Triggers>
                                     </Style>
                                 </StackPanel.Style>
-                                <!-- Group Move Buttons -->
                                 <Button Content="▲" Width="15" Height="15" Padding="0" Margin="0,0,2,0" FontSize="10"
                                         Command="{Binding DataContext.MoveGroupUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding .}" Background="Transparent" BorderThickness="0"/>
@@ -714,8 +743,9 @@
 
         <!-- Right: Detail Editor -->
         <Grid Grid.Column="1" Margin="20">
-            <!-- 1. Group Editor (Visible when SelectedGroup != null and SelectedSequence == null) -->
+            <!-- 1. Group Editor -->
             <StackPanel DataContext="{Binding SelectedGroup}">
+                <!-- ... (Group Editor Content Unchanged) ... -->
                 <StackPanel.Style>
                     <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -732,7 +762,6 @@
                     </Style>
                 </StackPanel.Style>
 
-                <!-- Normal Group Header -->
                 <TextBlock Text="그룹 설정 (Group Settings)" FontSize="20" FontWeight="Bold" Margin="0,0,0,15" Foreground="#EF6C00">
                     <TextBlock.Style>
                          <Style TargetType="TextBlock">
@@ -746,7 +775,6 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <!-- Start Group Header -->
                 <TextBlock Text="시작 지점 설정 (Entry Point)" FontSize="20" FontWeight="Bold" Margin="0,0,0,15" Foreground="#D32F2F">
                     <TextBlock.Style>
                          <Style TargetType="TextBlock">
@@ -760,7 +788,6 @@
                     </TextBlock.Style>
                 </TextBlock>
                 
-                <!-- Start Step Selection (Only for Start Group) -->
                 <GroupBox Header="시작 스텝 지정" Margin="0,0,0,15" Padding="10" BorderBrush="#D32F2F">
                     <GroupBox.Style>
                          <Style TargetType="GroupBox">
@@ -780,12 +807,13 @@
                             <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       SelectedValue="{Binding StartJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       SelectedValuePath="Id"
-                                      ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                                      ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                      DataContextChanged="OnComboBoxDataContextChanged"
+                                      Loaded="OnComboBoxLoaded"/>
                         </DockPanel>
                     </StackPanel>
                 </GroupBox>
 
-                <!-- Normal Group Settings (Hidden for Start Group) -->
                 <StackPanel>
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
@@ -803,29 +831,33 @@
                         <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
                     </DockPanel>
 
-                    <!-- Group Flow Control -->
                     <GroupBox Header="그룹 흐름 제어 (Flow Control)" Margin="0,0,0,15" Padding="10" BorderBrush="#FF9800">
                         <StackPanel>
                             <DockPanel LastChildFill="True" Margin="0,0,0,5">
                                 <TextBlock Text="시작 스텝 (Entry):" VerticalAlignment="Center" Width="110"/>
-                                <ComboBox ItemsSource="{Binding DataContext.AvailableGroupEntryTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                <ComboBox x:Name="CboGroupEntry"
+                                          ItemsSource="{Binding DataContext.AvailableGroupEntryTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                           SelectedValue="{Binding DataContext.SelectedGroupEntryJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           SelectedValuePath="Id"
                                           ItemTemplate="{StaticResource JumpTargetTemplate}"
-                                          ToolTip="이 그룹 진입 시 처음 실행할 스텝"/>
+                                          ToolTip="이 그룹 진입 시 처음 실행할 스텝"
+                                          DataContextChanged="OnComboBoxDataContextChanged"
+                                          Loaded="OnComboBoxLoaded"/>
                             </DockPanel>
                             <DockPanel LastChildFill="True">
                                 <TextBlock Text="종료 후 이동 (Next):" VerticalAlignment="Center" Width="110"/>
-                                <ComboBox ItemsSource="{Binding DataContext.AvailableGroupExitTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                <ComboBox x:Name="CboGroupExit"
+                                          ItemsSource="{Binding DataContext.AvailableGroupExitTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                           SelectedValue="{Binding DataContext.SelectedGroupExitJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           SelectedValuePath="Id"
                                           ItemTemplate="{StaticResource JumpTargetTemplate}"
-                                          ToolTip="이 그룹의 실행이 끝나면 이동할 다음 그룹"/>
+                                          ToolTip="이 그룹의 실행이 끝나면 이동할 다음 그룹"
+                                          DataContextChanged="OnComboBoxDataContextChanged"
+                                          Loaded="OnComboBoxLoaded"/>
                             </DockPanel>
                         </StackPanel>
                     </GroupBox>
 
-                    <!-- Target Window Context Settings (Moved from SequenceItem) -->
                     <GroupBox Header="대상 윈도우 설정 (Global Context for this Group)" Margin="0,0,0,15" Padding="10" BorderBrush="#9C27B0">
                         <StackPanel>
                             <DockPanel LastChildFill="True" Margin="0,0,0,10">
@@ -875,7 +907,9 @@
                                     <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                               SelectedValue="{Binding ProcessNotFoundJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                               SelectedValuePath="Id"
-                                              ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                              DataContextChanged="OnComboBoxDataContextChanged"
+                                              Loaded="OnComboBoxLoaded"/>
                                 </DockPanel>
 
                                 <UniformGrid Columns="2" Margin="0,5,0,0">
@@ -894,7 +928,7 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- 2. Step Editor (Visible when SelectedSequence != null) -->
+            <!-- 2. Step Editor -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -949,7 +983,86 @@
                                 </DockPanel>
                                 
                                 <ContentControl Content="{Binding SelectedSequence.PreCondition}"
-                                                BorderBrush="LightGray" BorderThickness="1" Padding="5"/>
+                                                BorderBrush="LightGray" BorderThickness="1" Padding="5">
+                                    <ContentControl.Resources>
+                                        <!-- PROXY BINDING for Pre-Condition -->
+                                        <!-- Copy of ImageMatchCondition with Proxy Binding -->
+                                        <DataTemplate DataType="{x:Type models:ImageMatchCondition}">
+                                            <StackPanel Margin="5">
+                                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                                    <TextBlock Text="이미지:" VerticalAlignment="Center" Width="60"/>
+                                                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                                        <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
+                                                        <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
+                                                    </StackPanel>
+                                                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
+                                                </DockPanel>
+                                                <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,5" Height="100" Background="#F8F8F8">
+                                                    <Image Source="{Binding ImagePath, Converter={StaticResource UriToBitmapConverter}}" Stretch="Uniform"/>
+                                                </Border>
+                                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                                    <TextBlock Text="일치율:" VerticalAlignment="Center" Width="100"/>
+                                                    <TextBlock Text="{Binding Threshold, StringFormat=P0}" DockPanel.Dock="Right" Width="40" TextAlignment="Right"/>
+                                                    <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True"/>
+                                                </DockPanel>
+
+                                                <!-- Test Section -->
+                                                <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">
+                                                    <StackPanel>
+                                                        <Grid Margin="0,0,0,5">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                                    <TextBlock Text="Match Score: " FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding TestScore, StringFormat=P1}" Foreground="#1565C0" FontWeight="Bold"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="Result: " FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding TestResult}" Foreground="#0D47A1"/>
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1" Content="🔍 Test Match" 
+                                                                    Padding="10,5" Background="#2196F3" Foreground="White" FontWeight="Bold"
+                                                                    Command="{Binding DataContext.TestImageConditionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding .}"/>
+                                                        </Grid>
+                                                        
+                                                        <!-- Test Result Image Preview -->
+                                                        <Border BorderBrush="#90CAF9" BorderThickness="1" Background="White" Margin="0,5,0,0">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding DataContext.TestResultImage, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="{x:Null}">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <Image Source="{Binding DataContext.TestResultImage, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                                   MaxHeight="400" Stretch="Uniform" ToolTip="Matching Result (Red: Found, Blue: ROI)"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- PROXY BINDING HERE -->
+                                                <DockPanel>
+                                                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                                                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              SelectedValue="{Binding DataContext.SelectedStepPreConditionFailJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              SelectedValuePath="Id"
+                                                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                                              DataContextChanged="OnComboBoxDataContextChanged"
+                                                              Loaded="OnComboBoxLoaded"/>
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                        <!-- Add other proxy templates for Delay, Gray, etc. if needed. Assuming ImageMatch is primary target. -->
+                                    </ContentControl.Resources>
+                                </ContentControl>
                             </StackPanel>
                         </GroupBox>
 
@@ -963,7 +1076,53 @@
                                 </DockPanel>
 
                                 <ContentControl Content="{Binding SelectedSequence.Action}"
-                                                BorderBrush="LightGray" BorderThickness="1" Padding="5"/>
+                                                BorderBrush="LightGray" BorderThickness="1" Padding="5">
+                                    <ContentControl.Resources>
+                                        <!-- PROXY BINDING for Action (e.g. MouseClick) -->
+                                        <DataTemplate DataType="{x:Type models:MouseClickAction}">
+                                            <StackPanel Margin="5">
+                                                <Grid Margin="0,0,0,5">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="X:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                    <TextBox Grid.Column="1" Text="{Binding X, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
+                                                    <TextBlock Grid.Column="2" Text="Y:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                    <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
+                                                    <Button Grid.Column="4" Content="현재위치" Padding="5,0" Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                                </Grid>
+                                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                                    <CheckBox Content="찾은 좌표 사용" IsChecked="{Binding UseConditionAddress}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                    <TextBlock Text="클릭 종류:" VerticalAlignment="Center" Width="70"/>
+                                                    <ComboBox SelectedValue="{Binding ClickType}" SelectedValuePath="Content">
+                                                        <ComboBoxItem Content="Left"/><ComboBoxItem Content="Right"/><ComboBoxItem Content="Double"/>
+                                                    </ComboBox>
+                                                </DockPanel>
+                                                <UniformGrid Columns="2" Margin="0,0,0,5">
+                                                    <DockPanel Margin="0,0,5,0">
+                                                        <TextBlock Text="클릭 횟수:" VerticalAlignment="Center" Width="70"/>
+                                                        <TextBox Text="{Binding ClickCount, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    </DockPanel>
+                                                    <DockPanel>
+                                                        <TextBlock Text="간격(ms):" VerticalAlignment="Center" Width="70"/>
+                                                        <TextBox Text="{Binding ClickIntervalMs, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    </DockPanel>
+                                                </UniformGrid>
+                                                <!-- PROXY BINDING HERE -->
+                                                <DockPanel>
+                                                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="Gray"/>
+                                                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              SelectedValue="{Binding DataContext.SelectedStepActionFailJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              SelectedValuePath="Id"
+                                                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                                              DataContextChanged="OnComboBoxDataContextChanged"
+                                                              Loaded="OnComboBoxLoaded"/>
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                        <!-- Add other proxy templates for Idle, KeyPress, etc. -->
+                                    </ContentControl.Resources>
+                                </ContentControl>
                             </StackPanel>
                         </GroupBox>
 
@@ -977,7 +1136,142 @@
                                 </DockPanel>
 
                                 <ContentControl Content="{Binding SelectedSequence.PostCondition}"
-                                                BorderBrush="LightGray" BorderThickness="1" Padding="5" Margin="0,0,0,10"/>
+                                                BorderBrush="LightGray" BorderThickness="1" Padding="5" Margin="0,0,0,10">
+                                    <ContentControl.Resources>
+                                        <!-- PROXY BINDING for Post-Condition (Reuse structure but bind to Post Proxy) -->
+                                        <DataTemplate DataType="{x:Type models:ImageMatchCondition}">
+                                            <StackPanel Margin="5">
+                                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                                    <TextBlock Text="이미지:" VerticalAlignment="Center" Width="60"/>
+                                                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                                        <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
+                                                        <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
+                                                    </StackPanel>
+                                                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
+                                                </DockPanel>
+                                                <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,5" Height="100" Background="#F8F8F8">
+                                                    <Image Source="{Binding ImagePath, Converter={StaticResource UriToBitmapConverter}}" Stretch="Uniform"/>
+                                                </Border>
+                                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                                    <TextBlock Text="일치율:" VerticalAlignment="Center" Width="100"/>
+                                                    <TextBlock Text="{Binding Threshold, StringFormat=P0}" DockPanel.Dock="Right" Width="40" TextAlignment="Right"/>
+                                                    <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True"/>
+                                                </DockPanel>
+
+                                                <!-- Test Section -->
+                                                <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">
+                                                    <StackPanel>
+                                                        <Grid Margin="0,0,0,5">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                                    <TextBlock Text="Match Score: " FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding TestScore, StringFormat=P1}" Foreground="#1565C0" FontWeight="Bold"/>
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="Result: " FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding TestResult}" Foreground="#0D47A1"/>
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1" Content="🔍 Test Match" 
+                                                                    Padding="10,5" Background="#2196F3" Foreground="White" FontWeight="Bold"
+                                                                    Command="{Binding DataContext.TestImageConditionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding .}"/>
+                                                        </Grid>
+                                                        
+                                                        <!-- Test Result Image Preview -->
+                                                        <Border BorderBrush="#90CAF9" BorderThickness="1" Background="White" Margin="0,5,0,0">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding DataContext.TestResultImage, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="{x:Null}">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <Image Source="{Binding DataContext.TestResultImage, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                                   MaxHeight="400" Stretch="Uniform" ToolTip="Matching Result (Red: Found, Blue: ROI)"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- PROXY BINDING HERE -->
+                                                <DockPanel>
+                                                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                                                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              SelectedValue="{Binding DataContext.SelectedStepPostConditionFailJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              SelectedValuePath="Id"
+                                                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                                              DataContextChanged="OnComboBoxDataContextChanged"
+                                                              Loaded="OnComboBoxLoaded"/>
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+
+                                        <!-- Proxy Binding Template for SwitchCaseCondition (Post) -->
+                                        <DataTemplate DataType="{x:Type models:SwitchCaseCondition}">
+                                            <StackPanel Margin="5">
+                                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                                                    <ComboBox IsEditable="True" 
+                                                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              DisplayMemberPath="Name"
+                                                              SelectedValuePath="Name"
+                                                              Text="{Binding TargetVariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </DockPanel>
+
+                                                <TextBlock Text="케이스 목록 (Cases):" FontWeight="Bold" Margin="0,5,0,5"/>
+                                                
+                                                <ItemsControl ItemsSource="{Binding Cases}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,0,0,5">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="값(Int):" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                                <TextBox Grid.Column="1" Text="{Binding CaseValue, UpdateSourceTrigger=PropertyChanged}"/>
+                                                                <TextBlock Grid.Column="2" Text="→ 이동:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                                                                <!-- Direct Binding for Case Jump -->
+                                                                <ComboBox Grid.Column="3" 
+                                                                          ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                          SelectedValue="{Binding JumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                          SelectedValuePath="Id"
+                                                                          ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                                                          DataContextChanged="OnComboBoxDataContextChanged"
+                                                                          Loaded="OnComboBoxLoaded"/>
+                                                                <Button Grid.Column="4" Content="-" Width="25" Margin="5,0,0,0" Background="#FFEBEE" Foreground="Red"
+                                                                        Command="{Binding DataContext.RemoveSwitchCaseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                        CommandParameter="{Binding .}"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <Button Content="+ 케이스 추가" 
+                                                        Command="{Binding DataContext.AddSwitchCaseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding .}"
+                                                        Margin="0,5,0,10" Background="#E8F5E9"/>
+
+                                                <!-- Proxy Binding for Fail Jump -->
+                                                <DockPanel>
+                                                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                                                    <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              SelectedValue="{Binding DataContext.SelectedStepPostConditionFailJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              SelectedValuePath="Id"
+                                                              ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                                              DataContextChanged="OnComboBoxDataContextChanged"
+                                                              Loaded="OnComboBoxLoaded"/>
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ContentControl.Resources>
+                                </ContentControl>
 
                                 <Separator Margin="0,5,0,10"/>
 
@@ -989,10 +1283,13 @@
                                     
                                     <StackPanel Grid.Column="0" Margin="0,0,10,0">
                                         <TextBlock Text="[성공 시] 흐름 제어 (다음 단계)" Foreground="#2E7D32" FontWeight="Bold" Margin="0,0,0,5"/>
+                                        <!-- PROXY BINDING for Success Jump -->
                                         <ComboBox ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                  SelectedValue="{Binding SuccessJumpId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValue="{Binding DataContext.SelectedStepSuccessJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   SelectedValuePath="Id"
-                                                  ItemTemplate="{StaticResource JumpTargetTemplate}"/>
+                                                  ItemTemplate="{StaticResource JumpTargetTemplate}"
+                                                  DataContextChanged="OnComboBoxDataContextChanged"
+                                                  Loaded="OnComboBoxLoaded"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -1000,7 +1297,6 @@
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
-
             <!-- Placeholder -->
             <TextBlock Text="편집할 그룹이나 스텝을 선택하세요" 
                        HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="Gray" FontSize="16">
@@ -1023,6 +1319,7 @@
 
         <!-- Variable Manager Overlay -->
         <Grid Grid.ColumnSpan="2" Background="#80000000" Visibility="{Binding IsVariableManagerOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+             <!-- ... (Variable Manager Content Unchanged) ... -->
             <Border Background="White" Width="500" Height="400" CornerRadius="10" Padding="20">
                 <Grid>
                     <Grid.RowDefinitions>

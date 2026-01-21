@@ -191,6 +191,22 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _regionH, value);
         }
 
+        // Retry Properties
+        private int _maxSearchCount = 1;
+        private int _searchIntervalMs = 500;
+
+        public int MaxSearchCount
+        {
+            get => _maxSearchCount;
+            set => this.RaiseAndSetIfChanged(ref _maxSearchCount, value);
+        }
+
+        public int SearchIntervalMs
+        {
+            get => _searchIntervalMs;
+            set => this.RaiseAndSetIfChanged(ref _searchIntervalMs, value);
+        }
+
         private System.Windows.Point? _foundPoint;
         private double _testScore;
         private string _testResult = "Not Tested";
@@ -219,78 +235,95 @@ namespace Macro.Models
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
             _foundPoint = null;
-            return await Task.Run(() =>
+            return await Task.Run(async () =>
             {
-                try
+                int attempts = Math.Max(1, MaxSearchCount);
+                int interval = Math.Max(0, SearchIntervalMs);
+
+                for (int i = 0; i < attempts; i++)
                 {
                     if (token.IsCancellationRequested) return false;
 
-                    // 1. 현재 화면 캡처 및 영역 정보 획득
-                    var captureData = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
+                    try
                     {
-                        var bmp = ScreenCaptureHelper.GetScreenCapture();
-                        var bounds = ScreenCaptureHelper.GetScreenBounds();
-                        bmp?.Freeze();
-                        return new { Image = bmp, Bounds = bounds };
-                    });
-
-                    if (captureData?.Image == null) return false;
-
-                    if (string.IsNullOrEmpty(ImagePath)) return false;
-
-                    // [Path Resolve] 상대 경로 처리
-                    string targetPath = ImagePath;
-                    if (!string.IsNullOrEmpty(targetPath) && !System.IO.Path.IsPathRooted(targetPath))
-                    {
-                        var currentRecipe = RecipeManager.Instance.CurrentRecipe;
-                        if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
+                        // 1. 현재 화면 캡처 및 영역 정보 획득
+                        // (반복문 안에서 매번 캡처해야 최신 화면 반영)
+                        var captureData = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
                         {
-                            var dir = System.IO.Path.GetDirectoryName(currentRecipe.FilePath);
-                            if (dir != null)
+                            var bmp = ScreenCaptureHelper.GetScreenCapture();
+                            var bounds = ScreenCaptureHelper.GetScreenBounds();
+                            bmp?.Freeze();
+                            return new { Image = bmp, Bounds = bounds };
+                        });
+
+                        if (captureData?.Image == null) return false;
+
+                        if (string.IsNullOrEmpty(ImagePath)) return false;
+
+                        // [Path Resolve] 상대 경로 처리
+                        string targetPath = ImagePath;
+                        if (!string.IsNullOrEmpty(targetPath) && !System.IO.Path.IsPathRooted(targetPath))
+                        {
+                            var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+                            if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
                             {
-                                targetPath = System.IO.Path.Combine(dir, targetPath);
+                                var dir = System.IO.Path.GetDirectoryName(currentRecipe.FilePath);
+                                if (dir != null)
+                                {
+                                    targetPath = System.IO.Path.Combine(dir, targetPath);
+                                }
                             }
                         }
-                    }
 
-                    // ROI 영역 확인 (절대 좌표 -> 이미지 로컬 좌표 변환)
-                    System.Windows.Rect? roi = null;
-                    if (UseRegion && RegionW > 0 && RegionH > 0)
+                        // ROI 영역 확인 (절대 좌표 -> 이미지 로컬 좌표 변환)
+                        System.Windows.Rect? roi = null;
+                        if (UseRegion && RegionW > 0 && RegionH > 0)
+                        {
+                            double rx = (RegionX * _scaleX + _offsetX) - captureData.Bounds.Left;
+                            double ry = (RegionY * _scaleY + _offsetY) - captureData.Bounds.Top;
+                            double rw = RegionW * _scaleX;
+                            double rh = RegionH * _scaleY;
+                            roi = new System.Windows.Rect(rx, ry, rw, rh);
+                        }
+                        
+                        if (token.IsCancellationRequested) return false;
+
+                        // 2. 이미지 서치
+                        // 스케일 정보 전달 (_scaleX, _scaleY는 ConfigureRelativeCoordinates에서 설정됨)
+                        var result = ImageSearchService.FindImage(captureData.Image, targetPath, Threshold, roi, _scaleX, _scaleY);
+
+                        if (result.HasValue)
+                        {
+                            // 이미지 로컬 좌표 -> 스크린 절대 좌표 변환
+                            _foundPoint = new System.Windows.Point(
+                                result.Value.X + captureData.Bounds.Left, 
+                                result.Value.Y + captureData.Bounds.Top);
+                            
+                            if (!string.IsNullOrEmpty(ResultVariableName))
+                            {
+                                MacroEngineService.Instance.Variables[ResultVariableName] = "True";
+                            }
+                            return true;
+                        }
+                    }
+                    catch (Exception)
                     {
-                        double rx = (RegionX * _scaleX + _offsetX) - captureData.Bounds.Left;
-                        double ry = (RegionY * _scaleY + _offsetY) - captureData.Bounds.Top;
-                        double rw = RegionW * _scaleX;
-                        double rh = RegionH * _scaleY;
-                        roi = new System.Windows.Rect(rx, ry, rw, rh);
+                        // 개별 시도 실패는 무시하고 재시도
                     }
-                    
-                    if (token.IsCancellationRequested) return false;
 
-                    // 2. 이미지 서치
-                    // 스케일 정보 전달 (_scaleX, _scaleY는 ConfigureRelativeCoordinates에서 설정됨)
-                    var result = ImageSearchService.FindImage(captureData.Image, targetPath, Threshold, roi, _scaleX, _scaleY);
-
-                    if (!string.IsNullOrEmpty(ResultVariableName))
+                    // 마지막 시도가 아니면 대기
+                    if (i < attempts - 1)
                     {
-                        MacroEngineService.Instance.Variables[ResultVariableName] = result.HasValue ? "True" : "False";
+                        await Task.Delay(interval, token);
                     }
-
-                    if (result.HasValue)
-                    {
-                        // 이미지 로컬 좌표 -> 스크린 절대 좌표 변환
-                        _foundPoint = new System.Windows.Point(
-                            result.Value.X + captureData.Bounds.Left, 
-                            result.Value.Y + captureData.Bounds.Top);
-                        return true;
-                    }
-
-                    // 3. 결과 반환
-                    return false;
                 }
-                catch (Exception)
+
+                // 모든 시도 실패
+                if (!string.IsNullOrEmpty(ResultVariableName))
                 {
-                    return false;
+                    MacroEngineService.Instance.Variables[ResultVariableName] = "False";
                 }
+                return false;
             }, token);
         }
     }

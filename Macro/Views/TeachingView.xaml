@@ -89,6 +89,18 @@
                     <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center"/>
                 </DockPanel>
 
+                <UniformGrid Columns="2" Margin="0,0,0,5">
+                    <DockPanel Margin="0,0,5,0">
+                        <TextBlock Text="재시도 횟수:" VerticalAlignment="Center" Width="70"/>
+                        <TextBox Text="{Binding MaxSearchCount, UpdateSourceTrigger=PropertyChanged}" ToolTip="이미지를 찾을 때까지 반복 시도할 최대 횟수입니다."/>
+                    </DockPanel>
+                    <DockPanel>
+                        <TextBlock Text="재시도 간격:" VerticalAlignment="Center" Width="70"/>
+                        <TextBox Text="{Binding SearchIntervalMs, UpdateSourceTrigger=PropertyChanged}" ToolTip="재시도 사이의 대기 시간(ms)입니다."/>
+                        <TextBlock Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                    </DockPanel>
+                </UniformGrid>
+
                 <!-- Test Section -->
                 <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">
                     <StackPanel>
@@ -986,7 +998,6 @@
                                                 BorderBrush="LightGray" BorderThickness="1" Padding="5">
                                     <ContentControl.Resources>
                                         <!-- PROXY BINDING for Pre-Condition -->
-                                        <!-- Copy of ImageMatchCondition with Proxy Binding -->
                                         <DataTemplate DataType="{x:Type models:ImageMatchCondition}">
                                             <StackPanel Margin="5">
                                                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -1005,6 +1016,18 @@
                                                     <TextBlock Text="{Binding Threshold, StringFormat=P0}" DockPanel.Dock="Right" Width="40" TextAlignment="Right"/>
                                                     <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True"/>
                                                 </DockPanel>
+
+                                                <UniformGrid Columns="2" Margin="0,0,0,5">
+                                                    <DockPanel Margin="0,0,5,0">
+                                                        <TextBlock Text="재시도 횟수:" VerticalAlignment="Center" Width="70"/>
+                                                        <TextBox Text="{Binding MaxSearchCount, UpdateSourceTrigger=PropertyChanged}" ToolTip="이미지를 찾을 때까지 반복 시도할 최대 횟수입니다."/>
+                                                    </DockPanel>
+                                                    <DockPanel>
+                                                        <TextBlock Text="재시도 간격:" VerticalAlignment="Center" Width="70"/>
+                                                        <TextBox Text="{Binding SearchIntervalMs, UpdateSourceTrigger=PropertyChanged}" ToolTip="재시도 사이의 대기 시간(ms)입니다."/>
+                                                        <TextBlock Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                                    </DockPanel>
+                                                </UniformGrid>
 
                                                 <!-- Test Section -->
                                                 <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">
@@ -1157,6 +1180,18 @@
                                                     <TextBlock Text="{Binding Threshold, StringFormat=P0}" DockPanel.Dock="Right" Width="40" TextAlignment="Right"/>
                                                     <Slider Minimum="0.1" Maximum="1.0" Value="{Binding Threshold}" TickFrequency="0.1" IsSnapToTickEnabled="True"/>
                                                 </DockPanel>
+
+                                                <UniformGrid Columns="2" Margin="0,0,0,5">
+                                                    <DockPanel Margin="0,0,5,0">
+                                                        <TextBlock Text="재시도 횟수:" VerticalAlignment="Center" Width="70"/>
+                                                        <TextBox Text="{Binding MaxSearchCount, UpdateSourceTrigger=PropertyChanged}" ToolTip="이미지를 찾을 때까지 반복 시도할 최대 횟수입니다."/>
+                                                    </DockPanel>
+                                                    <DockPanel>
+                                                        <TextBlock Text="재시도 간격:" VerticalAlignment="Center" Width="70"/>
+                                                        <TextBox Text="{Binding SearchIntervalMs, UpdateSourceTrigger=PropertyChanged}" ToolTip="재시도 사이의 대기 시간(ms)입니다."/>
+                                                        <TextBlock Text="ms" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                                    </DockPanel>
+                                                </UniformGrid>
 
                                                 <!-- Test Section -->
                                                 <Border Background="#E3F2FD" CornerRadius="4" Padding="8" Margin="0,0,0,10">

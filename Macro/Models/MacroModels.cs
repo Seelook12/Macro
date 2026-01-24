@@ -62,6 +62,13 @@ namespace Macro.Models
         Restore
     }
 
+    public enum MouseCoordinateSource
+    {
+        Fixed,
+        Found,
+        Variable
+    }
+
     #endregion
 
     #region Condition Implementations
@@ -589,7 +596,7 @@ namespace Macro.Models
         public string JumpId
         {
             get => _jumpId;
-            set => this.RaiseAndSetIfChanged(ref _jumpId, value);
+            set => this.RaiseAndSetIfChanged(ref _jumpId, value ?? string.Empty);
         }
     }
 
@@ -664,7 +671,11 @@ namespace Macro.Models
         private string _clickType = "Left"; // Left, Right, Double
         private int _clickCount = 1;
         private int _clickIntervalMs = 100;
-        private bool _useConditionAddress;
+        
+        private MouseCoordinateSource _sourceType = MouseCoordinateSource.Fixed;
+        private string _xVariableName = string.Empty;
+        private string _yVariableName = string.Empty;
+
         private string _failJumpName = string.Empty;
 
         // Runtime Transform Properties
@@ -711,10 +722,37 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _clickIntervalMs, value);
         }
 
+        public MouseCoordinateSource SourceType
+        {
+            get => _sourceType;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _sourceType, value);
+                this.RaisePropertyChanged(nameof(UseConditionAddress));
+            }
+        }
+
+        public string XVariableName
+        {
+            get => _xVariableName;
+            set => this.RaiseAndSetIfChanged(ref _xVariableName, value);
+        }
+
+        public string YVariableName
+        {
+            get => _yVariableName;
+            set => this.RaiseAndSetIfChanged(ref _yVariableName, value);
+        }
+
+        // Backward Compatibility for JSON
         public bool UseConditionAddress
         {
-            get => _useConditionAddress;
-            set => this.RaiseAndSetIfChanged(ref _useConditionAddress, value);
+            get => SourceType == MouseCoordinateSource.Found;
+            set
+            {
+                if (value) SourceType = MouseCoordinateSource.Found;
+                else if (SourceType == MouseCoordinateSource.Found) SourceType = MouseCoordinateSource.Fixed;
+            }
         }
 
         public string FailJumpName
@@ -741,12 +779,25 @@ namespace Macro.Models
                 int finalX = 0;
                 int finalY = 0;
 
-                if (UseConditionAddress && conditionPoint.HasValue)
+                if (SourceType == MouseCoordinateSource.Found && conditionPoint.HasValue)
                 {
                     finalX = (int)conditionPoint.Value.X;
                     finalY = (int)conditionPoint.Value.Y;
                 }
-                else
+                else if (SourceType == MouseCoordinateSource.Variable)
+                {
+                    // 변수 모드: 전역 변수에서 값을 읽어옴 (그룹 범위 변수는 엔진 실행 시점에 전역으로 Flattening된다고 가정)
+                    var vars = MacroEngineService.Instance.Variables;
+                    int vx = 0, vy = 0;
+
+                    if (vars.TryGetValue(XVariableName, out var xStr)) int.TryParse(xStr, out vx);
+                    if (vars.TryGetValue(YVariableName, out var yStr)) int.TryParse(yStr, out vy);
+
+                    // 변수 좌표도 상대 좌표 계산 적용 (변수에 저장된 값이 '창 기준 상대 좌표'라고 가정)
+                    finalX = (int)(vx * _scaleX + _offsetX);
+                    finalY = (int)(vy * _scaleY + _offsetY);
+                }
+                else // Fixed
                 {
                     finalX = (int)(X * _scaleX + _offsetX);
                     finalY = (int)(Y * _scaleY + _offsetY);

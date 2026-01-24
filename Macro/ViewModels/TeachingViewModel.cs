@@ -225,13 +225,17 @@ namespace Macro.ViewModels
 
                     _selectedSequence = value;
                     
-                    // [Restored] Update targets to apply smart filtering (Current Group + Force Includes)
-                    UpdateJumpTargets();
-                    
                     this.RaisePropertyChanged(nameof(SelectedSequence));
                     
                     NotifyTypeChanges();
-                    DebugLogger.Log($"[VM] SelectedSequence Changed & Notified");
+
+                    // [Fix] Defer JumpTarget update to prevent ComboBox from clearing selection
+                    // Wait for the View to update its binding context (SelectedSequence) BEFORE changing the ItemsSource (JumpTargets).
+                    System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        UpdateJumpTargets();
+                        DebugLogger.Log($"[VM] SelectedSequence Changed & Targets Updated");
+                    });
                 }
             }
         }

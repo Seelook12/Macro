@@ -400,33 +400,91 @@
         <!-- 2. MouseClickAction (Direct) -->
         <DataTemplate DataType="{x:Type models:MouseClickAction}">
             <StackPanel Margin="5">
+                <!-- Source Selection -->
+                <TextBlock Text="좌표 소스 (Coordinate Source):" Margin="0,0,0,5" Foreground="Gray"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <RadioButton Content="지정 좌표 (Fixed)" GroupName="CoordSource" Margin="0,0,15,0"
+                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Fixed}"/>
+                    <RadioButton Content="찾은 좌표 (Found)" GroupName="CoordSource" Margin="0,0,15,0"
+                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Found}"
+                                 ToolTip="Pre-Condition(이미지/Gray)에서 찾은 위치를 사용합니다."/>
+                    <RadioButton Content="변수 좌표 (Var)" GroupName="CoordSource"
+                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+                                 ToolTip="변수에 저장된 값을 좌표로 사용합니다."/>
+                </StackPanel>
+
+                <!-- 1. Fixed Mode Input -->
                 <Grid Margin="0,0,0,5">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SourceType}" Value="Fixed">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="X:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <TextBox Grid.Column="1" Text="{Binding X, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
-                    
                     <TextBlock Grid.Column="2" Text="Y:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
-
-                    <Button Grid.Column="4" Content="현재위치" 
-                            Padding="5,0"
+                    <Button Grid.Column="4" Content="현재위치" Padding="5,0" 
                             Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             ToolTip="화면을 캡처하여 클릭한 위치의 좌표를 가져옵니다."/>
                 </Grid>
+
+                <!-- 2. Variable Mode Input -->
+                <Grid Margin="0,0,0,5">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SourceType}" Value="Variable">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <TextBlock Text="X 변수:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox Grid.Column="1" IsEditable="True" Margin="0,0,10,0"
+                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="Name" SelectedValuePath="Name"
+                              Text="{Binding XVariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                    
+                    <TextBlock Grid.Column="2" Text="Y 변수:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox Grid.Column="3" IsEditable="True" 
+                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="Name" SelectedValuePath="Name"
+                              Text="{Binding YVariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+
+                <!-- 3. Found Mode Info -->
+                <TextBlock Text="ℹ️ 이전 조건(Pre-Condition)에서 찾은 위치를 클릭합니다." 
+                           Foreground="#1565C0" Margin="0,0,0,5" FontStyle="Italic">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SourceType}" Value="Found">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                    <CheckBox Content="찾은 좌표 사용" IsChecked="{Binding UseConditionAddress}" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip="Pre-Condition에서 찾은 이미지의 중앙 좌표를 사용합니다."/>
                     <TextBlock Text="클릭 종류:" VerticalAlignment="Center" Width="70"/>
                     <ComboBox SelectedValue="{Binding ClickType}" SelectedValuePath="Content">
-                        <ComboBoxItem Content="Left"/>
-                        <ComboBoxItem Content="Right"/>
-                        <ComboBoxItem Content="Double"/>
+                        <ComboBoxItem Content="Left"/><ComboBoxItem Content="Right"/><ComboBoxItem Content="Double"/>
                     </ComboBox>
                 </DockPanel>
 
@@ -1101,10 +1159,37 @@
                                 <ContentControl Content="{Binding SelectedSequence.Action}"
                                                 BorderBrush="LightGray" BorderThickness="1" Padding="5">
                                     <ContentControl.Resources>
+                                        <!-- Add Converter Locally for Lookup Safety -->
+                                        <utils:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
+                                        
                                         <!-- PROXY BINDING for Action (e.g. MouseClick) -->
                                         <DataTemplate DataType="{x:Type models:MouseClickAction}">
                                             <StackPanel Margin="5">
+                                                <!-- Source Selection -->
+                                                <TextBlock Text="좌표 소스 (Coordinate Source):" Margin="0,0,0,5" Foreground="Gray"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <RadioButton Content="지정 좌표 (Fixed)" GroupName="CoordSourceLocal" Margin="0,0,15,0"
+                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Fixed}"/>
+                                                    <RadioButton Content="찾은 좌표 (Found)" GroupName="CoordSourceLocal" Margin="0,0,15,0"
+                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Found}"
+                                                                 ToolTip="Pre-Condition(이미지/Gray)에서 찾은 위치를 사용합니다."/>
+                                                    <RadioButton Content="변수 좌표 (Var)" GroupName="CoordSourceLocal"
+                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+                                                                 ToolTip="변수에 저장된 값을 좌표로 사용합니다."/>
+                                                </StackPanel>
+
+                                                <!-- 1. Fixed Mode Input -->
                                                 <Grid Margin="0,0,0,5">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SourceType}" Value="Fixed">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
@@ -1112,10 +1197,56 @@
                                                     <TextBox Grid.Column="1" Text="{Binding X, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
                                                     <TextBlock Grid.Column="2" Text="Y:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                                     <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
-                                                    <Button Grid.Column="4" Content="현재위치" Padding="5,0" Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                                    <Button Grid.Column="4" Content="현재위치" Padding="5,0" 
+                                                            Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            ToolTip="화면을 캡처하여 클릭한 위치의 좌표를 가져옵니다."/>
                                                 </Grid>
+
+                                                <!-- 2. Variable Mode Input -->
+                                                <Grid Margin="0,0,0,5">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SourceType}" Value="Variable">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    
+                                                    <TextBlock Text="X 변수:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                    <ComboBox Grid.Column="1" IsEditable="True" Margin="0,0,10,0"
+                                                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              DisplayMemberPath="Name" SelectedValuePath="Name"
+                                                              Text="{Binding XVariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    
+                                                    <TextBlock Grid.Column="2" Text="Y 변수:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                    <ComboBox Grid.Column="3" IsEditable="True" 
+                                                              ItemsSource="{Binding DataContext.DefinedVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              DisplayMemberPath="Name" SelectedValuePath="Name"
+                                                              Text="{Binding YVariableName, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </Grid>
+
+                                                <!-- 3. Found Mode Info -->
+                                                <TextBlock Text="ℹ️ 이전 조건(Pre-Condition)에서 찾은 위치를 클릭합니다." 
+                                                           Foreground="#1565C0" Margin="0,0,0,5" FontStyle="Italic">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SourceType}" Value="Found">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+
                                                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
-                                                    <CheckBox Content="찾은 좌표 사용" IsChecked="{Binding UseConditionAddress}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                                     <TextBlock Text="클릭 종류:" VerticalAlignment="Center" Width="70"/>
                                                     <ComboBox SelectedValue="{Binding ClickType}" SelectedValuePath="Content">
                                                         <ComboBoxItem Content="Left"/><ComboBoxItem Content="Right"/><ComboBoxItem Content="Double"/>

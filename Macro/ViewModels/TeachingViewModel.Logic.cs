@@ -270,93 +270,51 @@ namespace Macro.ViewModels
 
 
         private void UpdateJumpTargets()
-
         {
-
             if (_isLoading) return;
-
-
 
             DebugLogger.Log("[Logic] UpdateJumpTargets Started");
 
-
-
             _isUpdatingGroupTargets = true;
-
             try
-
             {
-
                 var forceIncludeIds = new HashSet<string>();
-
                 if (SelectedSequence != null)
-
                 {
-
                     if (!string.IsNullOrEmpty(SelectedSequence.SuccessJumpId)) forceIncludeIds.Add(SelectedSequence.SuccessJumpId);
-
                     if (SelectedSequence.PreCondition != null && !string.IsNullOrEmpty(SelectedSequence.PreCondition.FailJumpId)) forceIncludeIds.Add(SelectedSequence.PreCondition.FailJumpId);
-
                     if (SelectedSequence.Action != null && !string.IsNullOrEmpty(SelectedSequence.Action.FailJumpId)) forceIncludeIds.Add(SelectedSequence.Action.FailJumpId);
-
                     if (SelectedSequence.PostCondition != null && !string.IsNullOrEmpty(SelectedSequence.PostCondition.FailJumpId)) forceIncludeIds.Add(SelectedSequence.PostCondition.FailJumpId);
-
                 }
 
+                // [Fix] Race Condition Prevention
+                // Create a NEW collection instance instead of Clearing.
+                // This ensures that the View bound to the *previous* JumpTargets instance 
+                // doesn't see an empty list while it's still unloading/unbinding.
+                var newJumpTargets = new ObservableCollection<JumpTargetViewModel>();
 
-
-                JumpTargets.Clear();
-
-
-
-                JumpTargets.Add(new JumpTargetViewModel { Id = "(Next Step)", DisplayName = "(Next Step)", IsGroup = false });
-
-                JumpTargets.Add(new JumpTargetViewModel { Id = "(Ignore & Continue)", DisplayName = "(Ignore & Continue)", IsGroup = false });
-
-                JumpTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
-
-
+                newJumpTargets.Add(new JumpTargetViewModel { Id = "(Next Step)", DisplayName = "(Next Step)", IsGroup = false });
+                newJumpTargets.Add(new JumpTargetViewModel { Id = "(Ignore & Continue)", DisplayName = "(Ignore & Continue)", IsGroup = false });
+                newJumpTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
 
                 // Strict Sibling Logic
-
-
-
                 var parentGroup = SelectedSequence != null ? FindParentGroup(SelectedSequence) : SelectedGroup;
-
-
 
                 IEnumerable<ISequenceTreeNode> nodes = (parentGroup != null) ? parentGroup.Nodes : Groups.Cast<ISequenceTreeNode>();
 
+                AddNodesToTargetList(nodes, newJumpTargets, forceIncludeIds, false, SelectedSequence);
 
-
-
-
-
-
-                AddNodesToTargetList(nodes, JumpTargets, forceIncludeIds, false, SelectedSequence);
-
-
-
-
-
-
+                // Atomically swap the collection
+                JumpTargets = newJumpTargets;
 
                 DebugLogger.Log($"[Logic] JumpTargets Updated: Count={JumpTargets.Count}");
 
-
-
                 UpdateStepProxyProperties();
-
             }
-
             finally
-
             {
-
                 _isUpdatingGroupTargets = false;
-
             }
-
         }
 
         public void UpdateStepProxyProperties()
@@ -540,6 +498,16 @@ namespace Macro.ViewModels
                     else
                     {
                         seenIds.Add(id);
+                    }
+
+                    // [Sanitize] SwitchCaseItem null JumpId Fix
+                    if (item.PreCondition is SwitchCaseCondition preSwitch)
+                    {
+                        foreach (var c in preSwitch.Cases) if (c.JumpId == null) c.JumpId = string.Empty;
+                    }
+                    if (item.PostCondition is SwitchCaseCondition postSwitch)
+                    {
+                        foreach (var c in postSwitch.Cases) if (c.JumpId == null) c.JumpId = string.Empty;
                     }
                 }
                 else if (node is SequenceGroup subGroup)
@@ -753,6 +721,8 @@ namespace Macro.ViewModels
                 DelayCondition => "Delay",
                 ImageMatchCondition => "Image Match",
                 GrayChangeCondition => "Gray Change",
+                VariableCompareCondition => "Variable Compare",
+                SwitchCaseCondition => "Switch Case",
                 _ => "None"
             };
         }
@@ -1066,6 +1036,18 @@ namespace Macro.ViewModels
                 {
                     cond.FailJumpId = idMap[cond.FailJumpId];
                 }
+
+                // [Fix] SwitchCaseCondition 내부의 JumpId들도 매핑 테이블에 따라 업데이트
+                if (cond is SwitchCaseCondition switchCase)
+                {
+                    foreach (var caseItem in switchCase.Cases)
+                    {
+                        if (!string.IsNullOrEmpty(caseItem.JumpId) && idMap.ContainsKey(caseItem.JumpId))
+                        {
+                            caseItem.JumpId = idMap[caseItem.JumpId];
+                        }
+                    }
+                }
             }
             else if (component is IMacroAction act)
             {
@@ -1140,6 +1122,18 @@ namespace Macro.ViewModels
             if (!string.IsNullOrEmpty(condition.FailJumpId) && !IsIdInGroupRecursive(group, condition.FailJumpId))
             {
                 condition.FailJumpId = string.Empty;
+            }
+
+            // [Fix] SwitchCaseCondition 내부의 JumpId들도 유효성 검사
+            if (condition is SwitchCaseCondition switchCase)
+            {
+                foreach (var caseItem in switchCase.Cases)
+                {
+                    if (!string.IsNullOrEmpty(caseItem.JumpId) && !IsIdInGroupRecursive(group, caseItem.JumpId))
+                    {
+                        caseItem.JumpId = string.Empty;
+                    }
+                }
             }
         }
 

@@ -1,8 +1,9 @@
 <Application x:Class="Macro.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:Macro">
+             xmlns:local="clr-namespace:Macro"
+             xmlns:utils="clr-namespace:Macro.Utils">
     <Application.Resources>
-         
+         <utils:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
     </Application.Resources>
 </Application>

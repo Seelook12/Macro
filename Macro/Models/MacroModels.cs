@@ -30,6 +30,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(GrayChangeCondition), typeDiscriminator: nameof(GrayChangeCondition))]
     [JsonDerivedType(typeof(VariableCompareCondition), typeDiscriminator: nameof(VariableCompareCondition))]
     [JsonDerivedType(typeof(SwitchCaseCondition), typeDiscriminator: nameof(SwitchCaseCondition))]
+    [JsonDerivedType(typeof(ProcessRunningCondition), typeDiscriminator: nameof(ProcessRunningCondition))]
     public interface IMacroCondition : IReactiveObject
     {
         Task<bool> CheckAsync(CancellationToken token = default);
@@ -44,6 +45,7 @@ namespace Macro.Models
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
     [JsonDerivedType(typeof(MouseClickAction), typeDiscriminator: nameof(MouseClickAction))]
     [JsonDerivedType(typeof(KeyPressAction), typeDiscriminator: nameof(KeyPressAction))]
+    [JsonDerivedType(typeof(TextTypeAction), typeDiscriminator: nameof(TextTypeAction))]
     [JsonDerivedType(typeof(VariableSetAction), typeDiscriminator: nameof(VariableSetAction))]
     [JsonDerivedType(typeof(IdleAction), typeDiscriminator: nameof(IdleAction))]
     [JsonDerivedType(typeof(WindowControlAction), typeDiscriminator: nameof(WindowControlAction))]
@@ -308,7 +310,7 @@ namespace Macro.Models
                             
                             if (!string.IsNullOrEmpty(ResultVariableName))
                             {
-                                MacroEngineService.Instance.Variables[ResultVariableName] = "True";
+                                MacroEngineService.Instance.UpdateVariable(ResultVariableName, "True");
                             }
                             return true;
                         }
@@ -328,7 +330,7 @@ namespace Macro.Models
                 // 모든 시도 실패
                 if (!string.IsNullOrEmpty(ResultVariableName))
                 {
-                    MacroEngineService.Instance.Variables[ResultVariableName] = "False";
+                    MacroEngineService.Instance.UpdateVariable(ResultVariableName, "False");
                 }
                 return false;
             }, token);
@@ -660,6 +662,113 @@ namespace Macro.Models
         }
     }
 
+    public class ProcessRunningCondition : ReactiveObject, IMacroCondition
+    {
+        private string _processName = string.Empty;
+        private WindowControlSearchMethod _searchMethod = WindowControlSearchMethod.ProcessName;
+        private bool _isCheckRunning = true; // true: Running, false: Not Running
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        // Retry Properties
+        private int _maxSearchCount = 1;
+        private int _searchIntervalMs = 500;
+
+        public string ProcessName
+        {
+            get => _processName;
+            set => this.RaiseAndSetIfChanged(ref _processName, value);
+        }
+
+        public WindowControlSearchMethod SearchMethod
+        {
+            get => _searchMethod;
+            set => this.RaiseAndSetIfChanged(ref _searchMethod, value);
+        }
+
+        public bool IsCheckRunning
+        {
+            get => _isCheckRunning;
+            set => this.RaiseAndSetIfChanged(ref _isCheckRunning, value);
+        }
+
+        public int MaxSearchCount
+        {
+            get => _maxSearchCount;
+            set => this.RaiseAndSetIfChanged(ref _maxSearchCount, value);
+        }
+
+        public int SearchIntervalMs
+        {
+            get => _searchIntervalMs;
+            set => this.RaiseAndSetIfChanged(ref _searchIntervalMs, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public System.Windows.Point? FoundPoint => null;
+
+        public async Task<bool> CheckAsync(CancellationToken token = default)
+        {
+            return await Task.Run(async () =>
+            {
+                if (string.IsNullOrEmpty(ProcessName)) return false;
+
+                // 재시도 루프
+                int attempts = Math.Max(1, MaxSearchCount);
+                int interval = Math.Max(0, SearchIntervalMs);
+
+                for (int i = 0; i < attempts; i++)
+                {
+                    if (token.IsCancellationRequested) return false;
+
+                    bool isRunning = false;
+                    if (SearchMethod == WindowControlSearchMethod.ProcessName)
+                    {
+                        // .exe 확장자 제거 (GetProcessesByName은 확장자 없이 검색)
+                        string target = ProcessName;
+                        if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            target = target.Substring(0, target.Length - 4);
+                        }
+
+                        var processes = System.Diagnostics.Process.GetProcessesByName(target);
+                        isRunning = processes.Length > 0;
+                    }
+                    else // WindowTitle
+                    {
+                        IntPtr hWnd = InputHelper.FindWindowByTitle(ProcessName);
+                        isRunning = hWnd != IntPtr.Zero;
+                    }
+
+                    // 조건 만족 시 즉시 반환
+                    if (isRunning == IsCheckRunning)
+                    {
+                        return true;
+                    }
+
+                    // 마지막 시도가 아니면 대기
+                    if (i < attempts - 1)
+                    {
+                        await Task.Delay(interval, token);
+                    }
+                }
+
+                return false;
+            }, token);
+        }
+    }
+
     #endregion
 
     #region Action Implementations
@@ -673,8 +782,7 @@ namespace Macro.Models
         private int _clickIntervalMs = 100;
         
         private MouseCoordinateSource _sourceType = MouseCoordinateSource.Fixed;
-        private string _xVariableName = string.Empty;
-        private string _yVariableName = string.Empty;
+        private string _coordinateVariableName = string.Empty;
 
         private string _failJumpName = string.Empty;
 
@@ -683,6 +791,11 @@ namespace Macro.Models
         private double _scaleY = 1.0;
         private int _offsetX = 0;
         private int _offsetY = 0;
+
+        // Runtime Context (Injected during flattening)
+        [JsonIgnore]
+        public System.Collections.Generic.Dictionary<string, System.Windows.Point> RuntimeContextVariables { get; set; } 
+            = new System.Collections.Generic.Dictionary<string, System.Windows.Point>();
 
         public void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY)
         {
@@ -732,16 +845,10 @@ namespace Macro.Models
             }
         }
 
-        public string XVariableName
+        public string CoordinateVariableName
         {
-            get => _xVariableName;
-            set => this.RaiseAndSetIfChanged(ref _xVariableName, value);
-        }
-
-        public string YVariableName
-        {
-            get => _yVariableName;
-            set => this.RaiseAndSetIfChanged(ref _yVariableName, value);
+            get => _coordinateVariableName;
+            set => this.RaiseAndSetIfChanged(ref _coordinateVariableName, value);
         }
 
         // Backward Compatibility for JSON
@@ -786,16 +893,20 @@ namespace Macro.Models
                 }
                 else if (SourceType == MouseCoordinateSource.Variable)
                 {
-                    // 변수 모드: 전역 변수에서 값을 읽어옴 (그룹 범위 변수는 엔진 실행 시점에 전역으로 Flattening된다고 가정)
-                    var vars = MacroEngineService.Instance.Variables;
-                    int vx = 0, vy = 0;
-
-                    if (vars.TryGetValue(XVariableName, out var xStr)) int.TryParse(xStr, out vx);
-                    if (vars.TryGetValue(YVariableName, out var yStr)) int.TryParse(yStr, out vy);
-
-                    // 변수 좌표도 상대 좌표 계산 적용 (변수에 저장된 값이 '창 기준 상대 좌표'라고 가정)
-                    finalX = (int)(vx * _scaleX + _offsetX);
-                    finalY = (int)(vy * _scaleY + _offsetY);
+                    // 변수 모드: 주입된 RuntimeContextVariables에서 값 조회
+                    if (RuntimeContextVariables != null && 
+                        RuntimeContextVariables.TryGetValue(CoordinateVariableName, out var point))
+                    {
+                        // 변수 좌표도 상대 좌표 계산 적용 (변수에 저장된 값이 '창 기준 상대 좌표'라고 가정)
+                        finalX = (int)(point.X * _scaleX + _offsetX);
+                        finalY = (int)(point.Y * _scaleY + _offsetY);
+                    }
+                    else
+                    {
+                        // 변수를 찾지 못한 경우 (0,0) 혹은 예외 처리? 현재는 안전하게 0,0
+                        finalX = 0;
+                        finalY = 0;
+                    }
                 }
                 else // Fixed
                 {
@@ -827,12 +938,19 @@ namespace Macro.Models
     public class KeyPressAction : ReactiveObject, IMacroAction
     {
         private string _keyCode = string.Empty;
+        private int _pressDuration = 0; // 0 means random short click
         private string _failJumpName = string.Empty;
 
         public string KeyCode
         {
             get => _keyCode;
             set => this.RaiseAndSetIfChanged(ref _keyCode, value);
+        }
+
+        public int PressDuration
+        {
+            get => _pressDuration;
+            set => this.RaiseAndSetIfChanged(ref _pressDuration, value);
         }
 
         public string FailJumpName
@@ -868,7 +986,7 @@ namespace Macro.Models
                         
                         if (vKey > 0 && !token.IsCancellationRequested)
                         {
-                            InputHelper.PressKey((byte)vKey);
+                            InputHelper.PressKey((byte)vKey, PressDuration);
                         }
                     }
                     else
@@ -880,6 +998,49 @@ namespace Macro.Models
                 {
                     // 변환 실패 무시
                 }
+            }, token);
+        }
+    }
+
+    public class TextTypeAction : ReactiveObject, IMacroAction
+    {
+        private string _text = string.Empty;
+        private int _intervalMs = 50;
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        public string Text
+        {
+            get => _text;
+            set => this.RaiseAndSetIfChanged(ref _text, value);
+        }
+
+        public int IntervalMs
+        {
+            get => _intervalMs;
+            set => this.RaiseAndSetIfChanged(ref _intervalMs, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
+        {
+            await Task.Run(() =>
+            {
+                if (token.IsCancellationRequested) return;
+                if (string.IsNullOrEmpty(Text)) return;
+
+                InputHelper.TypeText(Text, IntervalMs, token);
             }, token);
         }
     }
@@ -934,7 +1095,7 @@ namespace Macro.Models
 
                 if (Operation == "Set")
                 {
-                    vars[VariableName] = Value;
+                    MacroEngineService.Instance.UpdateVariable(VariableName, Value);
                 }
                 else if (Operation == "Add" || Operation == "Sub")
                 {
@@ -943,8 +1104,8 @@ namespace Macro.Models
                     double val = 0;
                     double.TryParse(Value, out val);
 
-                    if (Operation == "Add") vars[VariableName] = (current + val).ToString();
-                    else vars[VariableName] = (current - val).ToString();
+                    double newValue = (Operation == "Add") ? (current + val) : (current - val);
+                    MacroEngineService.Instance.UpdateVariable(VariableName, newValue.ToString());
                 }
             }, token);
         }
@@ -1345,11 +1506,71 @@ namespace Macro.Models
         }
     }
 
+    public class CoordinateVariable : ReactiveObject
+    {
+        private string _name = string.Empty;
+        private int _x;
+        private int _y;
+        private string _description = string.Empty;
+
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public int X
+        {
+            get => _x;
+            set => this.RaiseAndSetIfChanged(ref _x, value);
+        }
+
+        public int Y
+        {
+            get => _y;
+            set => this.RaiseAndSetIfChanged(ref _y, value);
+        }
+
+        public string Description
+        {
+            get => _description;
+            set => this.RaiseAndSetIfChanged(ref _description, value);
+        }
+    }
+
+    public class GroupIntVariable : ReactiveObject
+    {
+        private string _name = string.Empty;
+        private int _value;
+        private string _description = string.Empty;
+
+        public string Name
+        {
+            get => _name;
+            set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public int Value
+        {
+            get => _value;
+            set => this.RaiseAndSetIfChanged(ref _value, value);
+        }
+
+        public string Description
+        {
+            get => _description;
+            set => this.RaiseAndSetIfChanged(ref _description, value);
+        }
+    }
+
     public class SequenceGroup : ReactiveObject, ISequenceTreeNode
     {
         private string _name = "Group";
         private ObservableCollection<ISequenceTreeNode> _nodes = new ObservableCollection<ISequenceTreeNode>();
+        private ObservableCollection<CoordinateVariable> _variables = new ObservableCollection<CoordinateVariable>();
+        private ObservableCollection<GroupIntVariable> _intVariables = new ObservableCollection<GroupIntVariable>();
         private ObservableCollection<SequenceItem>? _legacyItems;
+        private IMacroCondition? _postCondition;
 
         // Shared Context Fields
         private CoordinateMode _coordinateMode = CoordinateMode.Global;
@@ -1383,10 +1604,28 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _startJumpId, value);
         }
 
+        public IMacroCondition? PostCondition
+        {
+            get => _postCondition;
+            set => this.RaiseAndSetIfChanged(ref _postCondition, value);
+        }
+
         public ObservableCollection<ISequenceTreeNode> Nodes
         {
             get => _nodes;
             set => this.RaiseAndSetIfChanged(ref _nodes, value);
+        }
+
+        public ObservableCollection<CoordinateVariable> Variables
+        {
+            get => _variables;
+            set => this.RaiseAndSetIfChanged(ref _variables, value);
+        }
+
+        public ObservableCollection<GroupIntVariable> IntVariables
+        {
+            get => _intVariables;
+            set => this.RaiseAndSetIfChanged(ref _intVariables, value);
         }
 
         // Legacy Property for JSON Compatibility

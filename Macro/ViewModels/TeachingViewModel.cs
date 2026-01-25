@@ -26,9 +26,24 @@ namespace Macro.ViewModels
         private bool _clipboardIsGroup = false;
         private System.Windows.Media.Imaging.BitmapSource? _testResultImage;
 
+        // Coordinate Variables
+        private ObservableCollection<CoordinateVariable> _availableCoordinateVariables = new ObservableCollection<CoordinateVariable>();
+        public ObservableCollection<CoordinateVariable> AvailableCoordinateVariables
+        {
+            get => _availableCoordinateVariables;
+            set => this.RaiseAndSetIfChanged(ref _availableCoordinateVariables, value);
+        }
+
+        private ObservableCollection<string> _availableIntVariables = new ObservableCollection<string>();
+        public ObservableCollection<string> AvailableIntVariables
+        {
+            get => _availableIntVariables;
+            set => this.RaiseAndSetIfChanged(ref _availableIntVariables, value);
+        }
+
         // ComboBox Lists
-        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change", "Variable Compare", "Switch Case" };
-        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press", "Variable Set", "Window Control", "Multi Action" };
+        public List<string> ConditionTypes { get; } = new List<string> { "None", "Delay", "Image Match", "Gray Change", "Variable Compare", "Switch Case", "Process Running" };
+        public List<string> ActionTypes { get; } = new List<string> { "Idle", "Mouse Click", "Key Press", "Text Type", "Variable Set", "Window Control", "Multi Action" };
         
         public List<WindowControlState> WindowControlStates { get; } = new List<WindowControlState>
         {
@@ -203,8 +218,11 @@ namespace Macro.ViewModels
                     _selectedGroup = value;
                     
                     UpdateGroupProxyProperties();
+                    UpdateAvailableCoordinateVariables();
+                    UpdateAvailableIntVariables();
                     
                     this.RaisePropertyChanged(nameof(SelectedGroup));
+                    this.RaisePropertyChanged(nameof(SelectedGroupPostConditionType));
                     DebugLogger.Log($"[VM] SelectedGroup Changed & Notified");
                 }
             }
@@ -228,6 +246,8 @@ namespace Macro.ViewModels
                     this.RaisePropertyChanged(nameof(SelectedSequence));
                     
                     NotifyTypeChanges();
+                    UpdateAvailableCoordinateVariables();
+                    UpdateAvailableIntVariables();
 
                     // [Fix] Defer JumpTarget update to prevent ComboBox from clearing selection
                     // Wait for the View to update its binding context (SelectedSequence) BEFORE changing the ItemsSource (JumpTargets).
@@ -258,6 +278,12 @@ namespace Macro.ViewModels
             set => SetPostCondition(value);
         }
 
+        public string SelectedGroupPostConditionType
+        {
+            get => GetConditionType(SelectedGroup?.PostCondition);
+            set => SetGroupPostCondition(value);
+        }
+
         public string SelectedSubActionType
         {
             get => _selectedSubActionType;
@@ -279,6 +305,7 @@ namespace Macro.ViewModels
             HostScreen = screen;
             
             Groups.CollectionChanged += (s, e) => UpdateJumpTargets();
+            DefinedVariables.CollectionChanged += (s, e) => UpdateAvailableIntVariables();
             
             UpdateJumpTargets();
 

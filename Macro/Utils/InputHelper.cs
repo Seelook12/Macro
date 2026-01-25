@@ -98,6 +98,14 @@ namespace Macro.Utils
         [DllImport("user32.dll")]
         private static extern IntPtr GetShellWindow();
 
+        [DllImport("user32.dll")]
+        private static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
+        [DllImport("user32.dll")]
+        private static extern short VkKeyScan(char ch);
+
+        private const uint MAPVK_VK_TO_VSC = 0x00;
+
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
         public static System.Collections.Generic.List<string> GetOpenWindows()
@@ -125,6 +133,42 @@ namespace Macro.Utils
             }, IntPtr.Zero);
 
             return windows;
+        }
+
+        public static void TypeText(string text, int intervalMs, CancellationToken token)
+        {
+            foreach (char c in text)
+            {
+                if (token.IsCancellationRequested) break;
+
+                short vk = VkKeyScan(c);
+                if (vk == -1) continue; // 매핑되지 않는 문자
+
+                byte virtualKey = (byte)(vk & 0xff);
+                byte shiftState = (byte)((vk >> 8) & 0xff);
+
+                // Shift가 필요한 경우 (대문자, 특수기호 등)
+                // bit 0: Shift, bit 1: Ctrl, bit 2: Alt
+                bool shiftPressed = (shiftState & 1) != 0;
+                bool ctrlPressed = (shiftState & 2) != 0;
+                bool altPressed = (shiftState & 4) != 0;
+
+                if (shiftPressed) keybd_event(0x10, 0, 0, 0); // Shift Down
+                if (ctrlPressed) keybd_event(0x11, 0, 0, 0);  // Ctrl Down
+                if (altPressed) keybd_event(0x12, 0, 0, 0);   // Alt Down
+                
+                if (shiftPressed || ctrlPressed || altPressed) Thread.Sleep(10);
+
+                PressKey(virtualKey);
+
+                if (shiftPressed || ctrlPressed || altPressed) Thread.Sleep(10);
+
+                if (altPressed) keybd_event(0x12, 0, KEYEVENTF_KEYUP, 0);   // Alt Up
+                if (ctrlPressed) keybd_event(0x11, 0, KEYEVENTF_KEYUP, 0);  // Ctrl Up
+                if (shiftPressed) keybd_event(0x10, 0, KEYEVENTF_KEYUP, 0); // Shift Up
+
+                Thread.Sleep(intervalMs);
+            }
         }
 
         public static IntPtr FindWindowByTitle(string titlePart)
@@ -246,11 +290,42 @@ namespace Macro.Utils
             mouse_event(upFlag, 0, 0, 0, 0);
         }
 
-        public static void PressKey(byte virtualKey)
+        public static void PressKey(byte virtualKey, int durationMs = 0)
         {
-            keybd_event(virtualKey, 0, 0, 0);
-            Thread.Sleep(_random.Next(30, 70)); // 키를 누르고 있는 시간 (랜덤)
-            keybd_event(virtualKey, 0, KEYEVENTF_KEYUP, 0);
+            // Scan Code 구하기 (일부 프로그램/게임 호환성 위해 필수)
+            byte scanCode = (byte)MapVirtualKey(virtualKey, MAPVK_VK_TO_VSC);
+            uint flags = 0;
+            
+            // 확장 키 처리 (화살표, 홈/엔드 등)
+            if (IsExtendedKey(virtualKey))
+            {
+                flags |= KEYEVENTF_EXTENDEDKEY;
+            }
+
+            keybd_event(virtualKey, scanCode, flags, 0);
+            
+            // 지정된 시간이 있으면 그만큼 대기, 없으면 랜덤 클릭
+            if (durationMs > 0)
+            {
+                Thread.Sleep(durationMs);
+            }
+            else
+            {
+                Thread.Sleep(_random.Next(30, 70));
+            }
+
+            keybd_event(virtualKey, scanCode, flags | KEYEVENTF_KEYUP, 0);
+        }
+
+        private static bool IsExtendedKey(byte vk)
+        {
+            // Extended Keys: 
+            // Insert(45), Delete(46), Home(36), End(35), PageUp(33), PageDown(34)
+            // Left(37), Up(38), Right(39), Down(40)
+            // NumLock(144), Snapshot(44), Divide(111)
+            return (vk == 0x2D) || (vk == 0x2E) || (vk == 0x24) || (vk == 0x23) || (vk == 0x21) || (vk == 0x22) ||
+                   (vk == 0x25) || (vk == 0x26) || (vk == 0x27) || (vk == 0x28) ||
+                   (vk == 0x90) || (vk == 0x2C) || (vk == 0x6F);
         }
     }
 }

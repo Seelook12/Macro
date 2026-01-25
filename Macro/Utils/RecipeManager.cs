@@ -16,6 +16,7 @@ namespace Macro.Utils
         private RecipeItem? _currentRecipe;
         private List<SequenceItem> _loadedSequences = new List<SequenceItem>();
         private readonly string _recipeDir;
+        private readonly object _varFileLock = new object();
 
         public static RecipeManager Instance => _instance;
 
@@ -117,6 +118,52 @@ namespace Macro.Utils
             catch 
             {
                 _loadedSequences = new List<SequenceItem>();
+            }
+        }
+
+        public void UpdateVariableValue(string name, string value)
+        {
+            if (CurrentRecipe == null || string.IsNullOrEmpty(CurrentRecipe.FilePath)) return;
+
+            var varsPath = Path.ChangeExtension(CurrentRecipe.FilePath, ".vars.json");
+            
+            lock (_varFileLock)
+            {
+                try
+                {
+                    List<VariableDefinition> variables = new List<VariableDefinition>();
+                    var options = new JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true };
+
+                    // 1. Read existing
+                    if (File.Exists(varsPath))
+                    {
+                        var json = File.ReadAllText(varsPath);
+                        if (!string.IsNullOrWhiteSpace(json))
+                        {
+                            variables = JsonSerializer.Deserialize<List<VariableDefinition>>(json, options) ?? new List<VariableDefinition>();
+                        }
+                    }
+
+                    // 2. Update
+                    var target = variables.FirstOrDefault(v => v.Name == name);
+                    if (target != null)
+                    {
+                        target.DefaultValue = value;
+                    }
+                    else
+                    {
+                        // If not exists, add new (Optional, but safer)
+                        variables.Add(new VariableDefinition { Name = name, DefaultValue = value, Description = "Auto-saved runtime variable" });
+                    }
+
+                    // 3. Save
+                    var newJson = JsonSerializer.Serialize(variables, options);
+                    File.WriteAllText(varsPath, newJson);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to persist variable '{name}': {ex.Message}");
+                }
             }
         }
     }

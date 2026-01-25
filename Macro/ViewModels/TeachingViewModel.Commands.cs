@@ -26,6 +26,7 @@ namespace Macro.ViewModels
         // Interaction
         public Interaction<Unit, System.Windows.Point?> GetCoordinateInteraction { get; } = new Interaction<Unit, System.Windows.Point?>();
         public ReactiveCommand<Unit, Unit> PickCoordinateCommand { get; private set; } = null!;
+        public ReactiveCommand<CoordinateVariable, Unit> PickVariableCoordinateCommand { get; private set; } = null!;
         public Interaction<Unit, System.Windows.Rect?> GetRegionInteraction { get; } = new Interaction<Unit, System.Windows.Rect?>();
         public Interaction<Unit, string?> CaptureImageInteraction { get; } = new Interaction<Unit, string?>();
 
@@ -34,7 +35,7 @@ namespace Macro.ViewModels
         public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; private set; } = null!;
         public ReactiveCommand<object, Unit> PickRegionCommand { get; private set; } = null!;
         public ReactiveCommand<WindowControlAction, Unit> RefreshTargetListCommand { get; private set; } = null!;
-        public ReactiveCommand<SequenceGroup, Unit> RefreshContextTargetCommand { get; private set; } = null!; 
+        public ReactiveCommand<object, Unit> RefreshContextTargetCommand { get; private set; } = null!; 
 
         public ReactiveCommand<SequenceItem, Unit> MoveSequenceUpCommand { get; private set; } = null!;
         public ReactiveCommand<SequenceItem, Unit> MoveSequenceDownCommand { get; private set; } = null!;
@@ -55,6 +56,10 @@ namespace Macro.ViewModels
         public ReactiveCommand<Unit, Unit> CloseVariableManagerCommand { get; private set; } = null!;
         public ReactiveCommand<Unit, Unit> AddVariableDefinitionCommand { get; private set; } = null!;
         public ReactiveCommand<VariableDefinition, Unit> RemoveVariableDefinitionCommand { get; private set; } = null!;
+        
+        // Coordinate Variable Commands
+        public ReactiveCommand<Unit, Unit> AddCoordinateVariableCommand { get; private set; } = null!;
+        public ReactiveCommand<CoordinateVariable, Unit> RemoveCoordinateVariableCommand { get; private set; } = null!;
 
         public ReactiveCommand<MultiAction, Unit> AddSubActionCommand { get; private set; } = null!;
         public ReactiveCommand<IMacroAction, Unit> RemoveSubActionCommand { get; private set; } = null!;
@@ -117,6 +122,28 @@ namespace Macro.ViewModels
                 DefinedVariables.Remove(v);
             });
 
+            AddCoordinateVariableCommand = ReactiveCommand.Create(() => 
+            {
+                if (SelectedGroup != null)
+                {
+                    SelectedGroup.Variables.Add(new CoordinateVariable 
+                    { 
+                        Name = $"Point_{SelectedGroup.Variables.Count + 1}", 
+                        X = 0, 
+                        Y = 0, 
+                        Description = "New Coordinate" 
+                    });
+                }
+            }, this.WhenAnyValue(x => x.SelectedGroup).Select(g => g != null));
+
+            RemoveCoordinateVariableCommand = ReactiveCommand.Create<CoordinateVariable>(v => 
+            {
+                if (SelectedGroup != null && SelectedGroup.Variables.Contains(v))
+                {
+                    SelectedGroup.Variables.Remove(v);
+                }
+            });
+
             AddSubActionCommand = ReactiveCommand.Create<MultiAction>(parent => 
             {
                 if (parent == null) return;
@@ -126,6 +153,7 @@ namespace Macro.ViewModels
                     "Idle" => new IdleAction(),
                     "Mouse Click" => new MouseClickAction(),
                     "Key Press" => new KeyPressAction(),
+                    "Text Type" => new TextTypeAction(),
                     "Variable Set" => new VariableSetAction(),
                     "Window Control" => new WindowControlAction(),
                     "Multi Action" => new MultiAction(), 
@@ -152,10 +180,41 @@ namespace Macro.ViewModels
             });
 
             RefreshTargetListCommand = ReactiveCommand.CreateFromTask<WindowControlAction>(RefreshTargetListAsync);
-            RefreshContextTargetCommand = ReactiveCommand.CreateFromTask<SequenceGroup>(RefreshContextTargetAsync);
+            RefreshContextTargetCommand = ReactiveCommand.CreateFromTask<object>(RefreshContextTargetAsync);
 
             PickCoordinateCommand = ReactiveCommand.CreateFromTask(PickCoordinateAsync, this.WhenAnyValue(x => x.SelectedSequence, x => x.SelectedSequence!.Action, 
                 (item, action) => item != null && action is MouseClickAction));
+
+            PickVariableCoordinateCommand = ReactiveCommand.CreateFromTask<CoordinateVariable>(async (variable) => 
+            {
+                if (variable == null) return;
+
+                var point = await GetCoordinateInteraction.Handle(Unit.Default);
+                if (point.HasValue)
+                {
+                    var p = point.Value;
+                    
+                    // [Fix] Resolve effective context for ParentRelative groups
+                    var contextGroup = ResolveGroupContext(SelectedGroup);
+
+                    if (contextGroup != null && contextGroup.CoordinateMode == CoordinateMode.WindowRelative)
+                    {
+                        var winInfo = GetTargetWindowInfo(contextGroup);
+                        if (winInfo.HasValue)
+                        {
+                            contextGroup.RefWindowWidth = winInfo.Value.Width;
+                            contextGroup.RefWindowHeight = winInfo.Value.Height;
+
+                            variable.X = (int)(p.X - winInfo.Value.X);
+                            variable.Y = (int)(p.Y - winInfo.Value.Y);
+                            return;
+                        }
+                    }
+                    
+                    variable.X = (int)p.X;
+                    variable.Y = (int)p.Y;
+                }
+            });
 
             SelectImageCommand = ReactiveCommand.Create<ImageMatchCondition>(SelectImage);
             CaptureImageCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(CaptureImageAsync);
@@ -330,14 +389,25 @@ namespace Macro.ViewModels
             });
         }
 
-        private async Task RefreshContextTargetAsync(SequenceGroup group)
+        private async Task RefreshContextTargetAsync(object parameter)
         {
-            if (group == null) return;
+            if (parameter == null) return;
             
+            WindowControlSearchMethod searchMethod = WindowControlSearchMethod.ProcessName;
+
+            if (parameter is SequenceGroup group)
+            {
+                searchMethod = group.ContextSearchMethod;
+            }
+            else if (parameter is ProcessRunningCondition condition)
+            {
+                searchMethod = condition.SearchMethod;
+            }
+
             await Task.Run(() =>
             {
                 System.Collections.Generic.List<string> items;
-                if (group.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
+                if (searchMethod == WindowControlSearchMethod.ProcessName)
                 {
                     var processes = System.Diagnostics.Process.GetProcesses();
                     items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();

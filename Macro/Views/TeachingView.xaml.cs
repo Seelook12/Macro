@@ -228,6 +228,37 @@ namespace Macro.Views
             }
         }
 
+        private void TreeView_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Check if click was on a TreeViewItem
+            var source = e.OriginalSource as DependencyObject;
+            var treeViewItem = FindVisualParent<TreeViewItem>(source);
+
+            if (treeViewItem == null)
+            {
+                // Clicked on empty space within TreeView
+                if (ViewModel != null)
+                {
+                    ViewModel.SelectedGroup = null;
+                    ViewModel.SelectedSequence = null;
+                    
+                    // Clear TreeView selection visual (Optional, as ViewModel update might not clear it automatically if Mode=OneWay)
+                    // But standard TreeView doesn't support 'Unselect' easily via binding without behavior.
+                    // This logic mainly resets VM state so 'Add Group' works at Root level.
+                }
+            }
+        }
+
+        private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T parent) return parent;
+                child = System.Windows.Media.VisualTreeHelper.GetParent(child);
+            }
+            return null;
+        }
+
         private void OnComboBoxDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (sender is ComboBox comboBox)

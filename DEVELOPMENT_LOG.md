@@ -200,6 +200,43 @@
     - 중첩된 `ParentRelative` 그룹 내부에서 좌표/영역 픽업 시, 직계 부모가 아닌 **최상위 기준 윈도우**를 재귀적으로 추적(`GetEffectiveGroupContext`)하여 상대 좌표를 계산하도록 수정.
     - 이를 통해 티칭 시 저장된 좌표와 실제 실행 시 계산되는 좌표의 오차를 제거.
 
+### 3.24. 그룹별 좌표 변수(Coordinate Variables) 시스템 도입 (2026-01-24)
+- **Coordinate Variable Type**:
+    - 단순 문자열이 아닌 X, Y 좌표 쌍을 가지는 전용 데이터 타입(`CoordinateVariable`) 신설.
+    - 각 그룹(`SequenceGroup`) 내부에 고유한 좌표 변수 목록을 저장할 수 있도록 확장.
+- **Scope-based Inheritance**:
+    - 상위 그룹에서 정의된 좌표 변수는 하위 그룹의 스텝들이 상속받아 사용할 수 있는 계층적 스코프(Scope) 구조 구현.
+    - 변수명 충돌 시 하위 그룹(가장 가까운 그룹)의 변수가 우선권을 가짐.
+- **Hybrid Mouse Source UI**:
+    - `MouseClickAction`의 좌표 소스를 3가지 모드로 확장:
+        1. **지정 좌표 (Fixed)**: 기존 방식 (직접 입력 또는 현재 위치 픽업).
+        2. **찾은 좌표 (Found)**: 이전 이미지 매칭 결과 좌표 사용.
+        3. **변수 좌표 (Variable)**: 그룹 스코프에 정의된 좌표 변수 참조.
+- **Enhanced Teaching Editor**:
+    - 그룹 설정 패널 내 변수 관리 UI(DataGrid) 및 스크롤 처리 추가.
+    - 변수 설정 시에도 **[📍 위치]** 버튼을 통해 화면 클릭으로 좌표를 즉시 획득 가능.
+    - 중첩된 `ParentRelative` 그룹에서도 최상위 윈도우 컨텍스트를 추적하여 정확한 상대 좌표를 계산하도록 보정 로직(`ResolveGroupContext`) 적용.
+- **Execution Engine Upgrade**:
+    - 엔진 평탄화(`Flattening`) 시점에 그룹별 변수 스코프를 해석하여 액션에 동적 주입(`RuntimeContextVariables`).
+    - 티칭 에디터의 단일 스텝 실행(`RunSingleStep`) 시에도 상위 계층 변수를 수집하여 주입하는 로직을 추가하여 실행 결과의 일관성 확보.
+
+### 3.25. 프로세스 감지 및 변수 지속성 강화 (2026-01-24)
+- 2026-01-24 : 프로세스 실행 여부 확인 조건 (`ProcessRunningCondition`) 추가. (특정 프로그램의 실행/종료 상태에 따른 분기 지원)
+- 2026-01-24 : 런타임 변수 변경 시 파일(`.vars.json`) 즉시 저장 로직 구현. (`VariableSetAction`, `ImageMatchCondition` 결과값 영구 보존)
+- 2026-01-24 : 그룹 스코프 정수 변수(`GroupIntVariable`) 추가 및 계층적 스코프 연동. (전역 변수와 통합 관리)
+- 2026-01-24 : 티칭 에디터 트리뷰 빈 공간 클릭 시 선택 해제 기능 추가. (최상위 레벨 그룹 생성 편의성 확보)
+- 2026-01-24 : 그룹 설정에 '완료 확인 및 흐름 제어(Post-Condition)' UI 추가 및 엔진 로직 반영. (그룹 종료 시점에 조건 검사 및 `Switch Case` 분기 지원)
+
+### 3.26. 프로세스 감지 고도화 및 그룹 이동 버그 수정 (2026-01-25)
+- **ProcessRunningCondition 기능 확장**:
+    - **검색 기준 선택**: 프로세스 이름 뿐만 아니라 윈도우 타이틀을 기준으로 실행 여부를 감지할 수 있도록 `SearchMethod` 속성 추가 및 `CheckAsync` 로직 반영.
+    - **재시도 로직 도입**: `MaxSearchCount` 및 `SearchIntervalMs` 속성을 추가하여 조건 충족 시까지 반복 대기 및 확인 기능 구현.
+    - **UI 통합**: 사전/사후/그룹종료/공통 조건 UI에 검색 기준 및 재시도 설정 항목 일체 추가.
+- **안정성 및 버그 수정**:
+    - **Nested Group 이동 오류 수정**: 중첩 그룹 이동(Move Up/Down) 시 최상위 컬렉션에서 인덱스를 찾아 발생하던 `ArgumentOutOfRangeException` 해결 (`FindParentGroup`을 통한 부모 노드 내 이동 로직 적용).
+    - **XAML Resource Error 해결**: 특정 조건 선택 시 `EnumToBooleanConverter`를 찾지 못하던 `XamlParseException` 해결을 위해 로컬 리소스 등록 보강.
+    - **Refresh Command 개선**: `RefreshContextTargetCommand`가 개별 조건 객체의 검색 기준 설정을 인식하여 목록을 갱신하도록 범용성 확보.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
 - **주요 해결 사항**: 

@@ -298,11 +298,22 @@ namespace Macro.ViewModels
                 newJumpTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
 
                 // Strict Sibling Logic
-                var parentGroup = SelectedSequence != null ? FindParentGroup(SelectedSequence) : SelectedGroup;
+                IEnumerable<ISequenceTreeNode> nodes;
 
-                IEnumerable<ISequenceTreeNode> nodes = (parentGroup != null) ? parentGroup.Nodes : Groups.Cast<ISequenceTreeNode>();
-
-                AddNodesToTargetList(nodes, newJumpTargets, forceIncludeIds, false, SelectedSequence);
+                // [Fix] START Group Exception: Allow jumping to any Root Level Group
+                if (SelectedGroup != null && SelectedGroup.IsStartGroup && SelectedSequence == null)
+                {
+                    nodes = Groups.Cast<ISequenceTreeNode>();
+                    // Exclude START group itself from the list? 
+                    // AddNodesToTargetList handles 'excludeNode' logic.
+                    AddNodesToTargetList(nodes, newJumpTargets, forceIncludeIds, false, SelectedGroup);
+                }
+                else
+                {
+                    var parentGroup = SelectedSequence != null ? FindParentGroup(SelectedSequence) : SelectedGroup;
+                    nodes = (parentGroup != null) ? parentGroup.Nodes : Groups.Cast<ISequenceTreeNode>();
+                    AddNodesToTargetList(nodes, newJumpTargets, forceIncludeIds, false, SelectedSequence);
+                }
 
                 // Atomically swap the collection
                 JumpTargets = newJumpTargets;
@@ -343,6 +354,81 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedStepPostConditionFailJumpId));
         }
 
+        public void UpdateAvailableCoordinateVariables()
+        {
+            if (_isLoading) return;
+
+            var variables = new List<CoordinateVariable>();
+            var group = SelectedGroup ?? (SelectedSequence != null ? FindParentGroup(SelectedSequence) : null);
+
+            while (group != null)
+            {
+                // 상위 그룹의 변수가 리스트 뒤에 추가되거나, 
+                // 혹은 상위 그룹부터 수집해서 하위 그룹 변수로 덮어쓸 수도 있음.
+                // 여기서는 단순히 모든 접근 가능한 변수를 리스트업 (Name 충돌 시 하위 그룹 우선 표시 등의 정책은 추후 고려)
+                
+                // 역순으로 삽입하여 가장 가까운 그룹(자신)의 변수가 먼저 오도록 함
+                foreach (var v in group.Variables.Reverse())
+                {
+                    variables.Insert(0, v);
+                }
+
+                var parent = FindParentGroup(group);
+                if (parent == group) break; // Safety check
+                group = parent;
+            }
+
+            AvailableCoordinateVariables.Clear();
+            foreach (var v in variables)
+            {
+                AvailableCoordinateVariables.Add(v);
+            }
+        }
+
+        public void UpdateAvailableIntVariables()
+        {
+            if (_isLoading) return;
+
+            var variables = new List<string>();
+            
+            // 1. Add Global Variables
+            foreach (var v in DefinedVariables)
+            {
+                if (!variables.Contains(v.Name)) variables.Add(v.Name);
+            }
+
+            // 2. Add Group Local Variables (Hierarchy)
+            var group = SelectedGroup ?? (SelectedSequence != null ? FindParentGroup(SelectedSequence) : null);
+
+            var localVars = new List<string>();
+            while (group != null)
+            {
+                if (group.IntVariables != null)
+                {
+                    foreach (var v in group.IntVariables.Reverse())
+                    {
+                        // Add to temporary local list (preserving nearest scope first)
+                        if (!localVars.Contains(v.Name)) localVars.Insert(0, v.Name);
+                    }
+                }
+                var parent = FindParentGroup(group);
+                if (parent == group) break;
+                group = parent;
+            }
+
+            // Merge Local Variables
+            foreach (var v in localVars)
+            {
+                if (!variables.Contains(v)) variables.Add(v);
+            }
+
+            AvailableIntVariables.Clear();
+            foreach (var v in variables)
+            {
+                AvailableIntVariables.Add(v);
+            }
+        }
+
         private async Task RunSingleStepAsync(SequenceItem item)
         {
             if (item == null) return;
@@ -359,6 +445,36 @@ namespace Macro.ViewModels
                 item.ProcessNotFoundJumpId = contextGroup.ProcessNotFoundJumpId;
                 item.RefWindowWidth = contextGroup.RefWindowWidth;
                 item.RefWindowHeight = contextGroup.RefWindowHeight;
+            }
+
+            // [Variable Injection for Single Step]
+            if (item.Action is MouseClickAction mouseAction)
+            {
+                var runtimeVars = new Dictionary<string, System.Windows.Point>();
+                
+                // Traverse up to collect variables. 
+                var hierarchy = new Stack<SequenceGroup>();
+                var current = FindParentGroup(item);
+                while (current != null)
+                {
+                    hierarchy.Push(current);
+                    current = FindParentGroup(current);
+                }
+
+                // Apply variables from Root -> Leaf (Inner overrides Outer)
+                while (hierarchy.Count > 0)
+                {
+                    var group = hierarchy.Pop();
+                    if (group.Variables != null)
+                    {
+                        foreach (var v in group.Variables)
+                        {
+                            runtimeVars[v.Name] = new System.Windows.Point(v.X, v.Y);
+                        }
+                    }
+                }
+
+                mouseAction.RuntimeContextVariables = runtimeVars;
             }
 
             await MacroEngineService.Instance.RunSingleStepAsync(item);
@@ -723,6 +839,7 @@ namespace Macro.ViewModels
                 GrayChangeCondition => "Gray Change",
                 VariableCompareCondition => "Variable Compare",
                 SwitchCaseCondition => "Switch Case",
+                ProcessRunningCondition => "Process Running",
                 _ => "None"
             };
         }
@@ -734,6 +851,7 @@ namespace Macro.ViewModels
                 IdleAction => "Idle",
                 MouseClickAction => "Mouse Click",
                 KeyPressAction => "Key Press",
+                TextTypeAction => "Text Type",
                 VariableSetAction => "Variable Set",
                 WindowControlAction => "Window Control",
                 MultiAction => "Multi Action",
@@ -752,6 +870,7 @@ namespace Macro.ViewModels
                 "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
                 "Variable Compare" => new VariableCompareCondition(),
                 "Switch Case" => new SwitchCaseCondition(),
+                "Process Running" => new ProcessRunningCondition(),
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPreConditionType));
@@ -769,10 +888,29 @@ namespace Macro.ViewModels
                 "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
                 "Variable Compare" => new VariableCompareCondition(),
                 "Switch Case" => new SwitchCaseCondition(),
+                "Process Running" => new ProcessRunningCondition(),
                 _ => null
             };
             this.RaisePropertyChanged(nameof(SelectedPostConditionType));
             UpdateStepProxyProperties();
+        }
+
+        private void SetGroupPostCondition(string type)
+        {
+            if (SelectedGroup == null) return;
+
+            SelectedGroup.PostCondition = type switch
+            {
+                "Delay" => new DelayCondition { DelayTimeMs = 500 },
+                "Image Match" => new ImageMatchCondition { Threshold = 0.9 },
+                "Gray Change" => new GrayChangeCondition { Threshold = 10.0 },
+                "Variable Compare" => new VariableCompareCondition(),
+                "Switch Case" => new SwitchCaseCondition(),
+                "Process Running" => new ProcessRunningCondition(),
+                _ => null
+            };
+            this.RaisePropertyChanged(nameof(SelectedGroupPostConditionType));
+            UpdateGroupProxyProperties();
         }
 
         private void SetAction(string type)
@@ -790,6 +928,10 @@ namespace Macro.ViewModels
             else if (type == "Key Press" && !(SelectedSequence.Action is KeyPressAction))
             {
                 SelectedSequence.Action = new KeyPressAction();
+            }
+            else if (type == "Text Type" && !(SelectedSequence.Action is TextTypeAction))
+            {
+                SelectedSequence.Action = new TextTypeAction();
             }
             else if (type == "Variable Set" && !(SelectedSequence.Action is VariableSetAction))
             {

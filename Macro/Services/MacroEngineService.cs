@@ -538,6 +538,17 @@ namespace Macro.Services
             });
         }
 
+        public void UpdateVariable(string name, string value)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+
+            // 1. Update Runtime Memory
+            Variables[name] = value;
+
+            // 2. Persist to File
+            RecipeManager.Instance.UpdateVariableValue(name, value);
+        }
+
         private string GetTypeName(object obj)
         {
             return obj.GetType().Name;

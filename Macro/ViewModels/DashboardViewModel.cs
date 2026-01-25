@@ -128,7 +128,7 @@ namespace Macro.ViewModels
                         {
                             foreach (var group in loadedGroups)
                             {
-                                FlattenNodeRecursive(group, finalSequence, null);
+                                FlattenNodeRecursive(group, finalSequence, null, new Dictionary<string, System.Windows.Point>());
                             }
                         }
                         else
@@ -173,10 +173,36 @@ namespace Macro.ViewModels
             }, canStop);
         }
 
-        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext)
+        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext, Dictionary<string, System.Windows.Point> scopeVariables)
         {
             if (node is SequenceGroup group)
             {
+                // [Scope Management]
+                // Create a new scope for this group, inheriting from parent scope
+                var currentScope = new Dictionary<string, System.Windows.Point>(scopeVariables ?? new Dictionary<string, System.Windows.Point>());
+                
+                // Merge current group's variables (overwrite parent's if name collides)
+                if (group.Variables != null)
+                {
+                    foreach (var v in group.Variables)
+                    {
+                        currentScope[v.Name] = new System.Windows.Point(v.X, v.Y);
+                    }
+                }
+
+                // [Int Variable Injection]
+                // Initialize Group Int Variables into Global Variable Context
+                // Note: Since VariableSetAction uses global context, we pre-load them here.
+                // Warning: Last-write wins if names collide across parallel branches, but for sequential flattening it's okay.
+                if (group.IntVariables != null)
+                {
+                    foreach (var iv in group.IntVariables)
+                    {
+                        // Use UpdateVariable to ensure persistence and runtime update
+                        _engineService.UpdateVariable(iv.Name, iv.Value.ToString());
+                    }
+                }
+
                 // [Inheritance Logic]
                 if (group.CoordinateMode == CoordinateMode.ParentRelative && parentGroupContext != null)
                 {
@@ -206,7 +232,7 @@ namespace Macro.ViewModels
 
                 foreach (var child in group.Nodes)
                 {
-                    FlattenNodeRecursive(child, result, group);
+                    FlattenNodeRecursive(child, result, group, currentScope);
                 }
             }
             else if (node is SequenceItem item)
@@ -223,7 +249,22 @@ namespace Macro.ViewModels
                     item.ProcessNotFoundJumpId = parentGroupContext.ProcessNotFoundJumpId;
                     item.RefWindowWidth = parentGroupContext.RefWindowWidth;
                     item.RefWindowHeight = parentGroupContext.RefWindowHeight;
+
+                    // [Group Post-Condition Injection]
+                    // If this is the End step of a group, and the group has a Post-Condition,
+                    // we attach the group's condition to this End step.
+                    if (item.IsGroupEnd && parentGroupContext.PostCondition != null)
+                    {
+                        item.PostCondition = parentGroupContext.PostCondition;
+                    }
                 }
+
+                // [Variable Injection]
+                if (item.Action is MouseClickAction mouseAction)
+                {
+                    mouseAction.RuntimeContextVariables = new Dictionary<string, System.Windows.Point>(scopeVariables);
+                }
+
                 result.Add(item);
             }
         }

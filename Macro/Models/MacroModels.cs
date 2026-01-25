@@ -7,6 +7,7 @@ using Macro.Services;
 using System.Windows.Input;
 using System.Collections.ObjectModel;
 using System.Threading;
+using OpenCvSharp;
 
 namespace Macro.Models
 {
@@ -241,6 +242,16 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _testResult, value);
         }
 
+        // Context Size Properties
+        private int _contextWidth = 0;
+        private int _contextHeight = 0;
+
+        public void SetContextSize(int width, int height)
+        {
+            _contextWidth = width;
+            _contextHeight = height;
+        }
+
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
             _foundPoint = null;
@@ -253,19 +264,26 @@ namespace Macro.Models
                 {
                     if (token.IsCancellationRequested) return false;
 
+                    System.Windows.Media.Imaging.BitmapSource? captureImage = null;
+                    System.Windows.Rect? currentRoi = null;
+
                     try
                     {
                         // 1. 현재 화면 캡처 및 영역 정보 획득
-                        // (반복문 안에서 매번 캡처해야 최신 화면 반영)
-                        var captureData = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
-                        {
-                            var bmp = ScreenCaptureHelper.GetScreenCapture();
-                            var bounds = ScreenCaptureHelper.GetScreenBounds();
-                            bmp?.Freeze();
-                            return new { Image = bmp, Bounds = bounds };
-                        });
+                        MacroEngineService.Instance.AddLog($"[Debug] 캡처 시작 ({i + 1}/{attempts})");
+                        
+                        var bmp = ScreenCaptureHelper.GetScreenCapture();
+                        var bounds = ScreenCaptureHelper.GetScreenBounds();
+                        bmp?.Freeze();
+                        captureImage = bmp;
+                        
+                        var captureData = new { Image = bmp, Bounds = bounds };
 
-                        if (captureData?.Image == null) return false;
+                        if (captureData?.Image == null) 
+                        {
+                            MacroEngineService.Instance.AddLog($"[Debug] 캡처 실패 (Image is null)");
+                            return false;
+                        }
 
                         if (string.IsNullOrEmpty(ImagePath)) return false;
 
@@ -293,37 +311,97 @@ namespace Macro.Models
                             double rw = RegionW * _scaleX;
                             double rh = RegionH * _scaleY;
                             roi = new System.Windows.Rect(rx, ry, rw, rh);
+                            
+                            MacroEngineService.Instance.AddLog($"[Debug] ROI (User): {roi}, Scale: {_scaleX:F2}x{_scaleY:F2}, Offset: {_offsetX},{_offsetY}");
+                        }
+                        else if (_contextWidth > 0 && _contextHeight > 0)
+                        {
+                            double rx = _offsetX - captureData.Bounds.Left;
+                            double ry = _offsetY - captureData.Bounds.Top;
+                            double rw = _contextWidth;
+                            double rh = _contextHeight;
+                            roi = new System.Windows.Rect(rx, ry, rw, rh);
+
+                            MacroEngineService.Instance.AddLog($"[Debug] ROI (Auto-Window): {roi}, Scale: {_scaleX:F2}x{_scaleY:F2}");
+                        }
+                        else
+                        {
+                            MacroEngineService.Instance.AddLog($"[Debug] 전체 화면 검색, Scale: {_scaleX:F2}x{_scaleY:F2}, Offset: {_offsetX},{_offsetY}");
                         }
                         
+                        currentRoi = roi;
+
                         if (token.IsCancellationRequested) return false;
 
                         // 2. 이미지 서치
-                        // 스케일 정보 전달 (_scaleX, _scaleY는 ConfigureRelativeCoordinates에서 설정됨)
-                        var result = ImageSearchService.FindImage(captureData.Image, targetPath, Threshold, roi, _scaleX, _scaleY);
+                        MacroEngineService.Instance.AddLog($"[Debug] 매칭 시작: {System.IO.Path.GetFileName(targetPath)} (Threshold: {Threshold})");
+                        var result = ImageSearchService.FindImageDetailed(captureData.Image, targetPath, Threshold, roi, _scaleX, _scaleY);
 
-                        if (result.HasValue)
+                        if (result.Point.HasValue)
                         {
                             // 이미지 로컬 좌표 -> 스크린 절대 좌표 변환
                             _foundPoint = new System.Windows.Point(
-                                result.Value.X + captureData.Bounds.Left, 
-                                result.Value.Y + captureData.Bounds.Top);
+                                result.Point.Value.X + captureData.Bounds.Left, 
+                                result.Point.Value.Y + captureData.Bounds.Top);
                             
                             if (!string.IsNullOrEmpty(ResultVariableName))
                             {
                                 MacroEngineService.Instance.UpdateVariable(ResultVariableName, "True");
                             }
+                            MacroEngineService.Instance.AddLog($"[Debug] 매칭 성공 (Score: {result.Score:F4})");
                             return true;
                         }
+                        else
+                        {
+                            MacroEngineService.Instance.AddLog($"[Debug] 매칭 실패 (Best Score: {result.Score:F4})");
+                        }
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // 개별 시도 실패는 무시하고 재시도
+                        MacroEngineService.Instance.AddLog($"[Debug] 조건 검사 중 오류: {ex.Message}");
                     }
 
                     // 마지막 시도가 아니면 대기
                     if (i < attempts - 1)
                     {
                         await Task.Delay(interval, token);
+                    }
+                    else
+                    {
+                        MacroEngineService.Instance.AddLog($"[Debug] 마지막 시도 실패. 이미지 저장 진입. captureImage is null? {captureImage == null}");
+                        // [Debug] 최종 실패 시 디버그 이미지 저장
+                        if (captureImage != null)
+                        {
+                            try
+                            {
+                                var debugDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs", "DebugImages");
+                                if (!System.IO.Directory.Exists(debugDir)) System.IO.Directory.CreateDirectory(debugDir);
+
+                                string fileName = $"Fail_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString().Substring(0, 4)}.png";
+                                string fullPath = System.IO.Path.Combine(debugDir, fileName);
+
+                                using (var mat = OpenCvSharp.WpfExtensions.BitmapSourceConverter.ToMat(captureImage))
+                                {
+                                    if (currentRoi.HasValue)
+                                    {
+                                        var r = currentRoi.Value;
+                                        // ROI가 이미지 범위를 벗어나지 않도록 클램핑 필요할 수 있음
+                                        var rect = new OpenCvSharp.Rect((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
+                                        OpenCvSharp.Cv2.Rectangle(mat, rect, OpenCvSharp.Scalar.Red, 3);
+                                    }
+                                    
+                                    OpenCvSharp.Cv2.PutText(mat, $"Fail: {System.IO.Path.GetFileName(ImagePath)}", new OpenCvSharp.Point(10, 30), 
+                                        OpenCvSharp.HersheyFonts.HersheySimplex, 0.8, OpenCvSharp.Scalar.Red, 2);
+
+                                    mat.SaveImage(fullPath);
+                                    MacroEngineService.Instance.AddLog($"[Debug] 실패 화면 저장됨: {fileName}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                MacroEngineService.Instance.AddLog($"[Debug] 이미지 저장 실패: {ex.Message}");
+                            }
+                        }
                     }
                 }
 
@@ -447,12 +525,10 @@ namespace Macro.Models
                 {
                     if (token.IsCancellationRequested) return false;
 
-                    var captureData = System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
-                    {
-                        var bmp = ScreenCaptureHelper.GetScreenCapture();
-                        var bounds = ScreenCaptureHelper.GetScreenBounds();
-                        return new { Image = bmp, Bounds = bounds };
-                    });
+                    var bmp = ScreenCaptureHelper.GetScreenCapture();
+                    var bounds = ScreenCaptureHelper.GetScreenBounds();
+                    bmp?.Freeze();
+                    var captureData = new { Image = bmp, Bounds = bounds };
 
                     if (captureData?.Image == null) return false;
 
@@ -1002,10 +1078,18 @@ namespace Macro.Models
         }
     }
 
+    public enum TextInputMode
+    {
+        Direct,
+        Variable
+    }
+
     public class TextTypeAction : ReactiveObject, IMacroAction
     {
         private string _text = string.Empty;
         private int _intervalMs = 50;
+        private TextInputMode _inputMode = TextInputMode.Direct;
+        private string _variableName = string.Empty;
         private string _failJumpName = string.Empty;
         private string _failJumpId = string.Empty;
 
@@ -1019,6 +1103,18 @@ namespace Macro.Models
         {
             get => _intervalMs;
             set => this.RaiseAndSetIfChanged(ref _intervalMs, value);
+        }
+
+        public TextInputMode InputMode
+        {
+            get => _inputMode;
+            set => this.RaiseAndSetIfChanged(ref _inputMode, value);
+        }
+
+        public string VariableName
+        {
+            get => _variableName;
+            set => this.RaiseAndSetIfChanged(ref _variableName, value);
         }
 
         public string FailJumpName
@@ -1038,9 +1134,43 @@ namespace Macro.Models
             await Task.Run(() =>
             {
                 if (token.IsCancellationRequested) return;
-                if (string.IsNullOrEmpty(Text)) return;
 
-                InputHelper.TypeText(Text, IntervalMs, token);
+                string textToType = string.Empty;
+
+                if (InputMode == TextInputMode.Variable)
+                {
+                    if (!string.IsNullOrEmpty(VariableName))
+                    {
+                        var vars = MacroEngineService.Instance.Variables;
+                        if (vars.TryGetValue(VariableName, out var val))
+                        {
+                            textToType = val;
+                        }
+                    }
+                }
+                else
+                {
+                    textToType = Text;
+                    // Optional: Support {Var} expansion in Direct mode as well
+                    // textToType = MacroEngineService.Instance.ResolveTextVariables(Text); 
+                    // (Assuming ResolveTextVariables is made public or we implement replacement here)
+                    if (!string.IsNullOrEmpty(textToType))
+                    {
+                        var vars = MacroEngineService.Instance.Variables;
+                        foreach (var kvp in vars)
+                        {
+                            string placeholder = $"{{{kvp.Key}}}";
+                            if (textToType.Contains(placeholder))
+                            {
+                                textToType = textToType.Replace(placeholder, kvp.Value);
+                            }
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(textToType)) return;
+
+                InputHelper.TypeText(textToType, IntervalMs, token);
             }, token);
         }
     }

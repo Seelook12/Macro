@@ -79,17 +79,24 @@ namespace Macro.ViewModels
 
                 // For Exit targets, we also need to consider current value as forced
 
-
-
-
-
                 var forceIds = new HashSet<string>();
 
                 var endStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
 
                 if (endStep != null && !string.IsNullOrEmpty(endStep.SuccessJumpId)) forceIds.Add(endStep.SuccessJumpId);
 
-
+                // [Fix] Include SwitchCase JumpIds in Group PostCondition
+                if (SelectedGroup.PostCondition is SwitchCaseCondition groupSwitch)
+                {
+                    foreach (var c in groupSwitch.Cases)
+                    {
+                        if (!string.IsNullOrEmpty(c.JumpId)) forceIds.Add(c.JumpId);
+                    }
+                }
+                if (SelectedGroup.PostCondition != null && !string.IsNullOrEmpty(SelectedGroup.PostCondition.FailJumpId))
+                {
+                    forceIds.Add(SelectedGroup.PostCondition.FailJumpId);
+                }
 
                 AddNodesToTargetList(siblings, AvailableGroupExitTargets, forceIds, false, SelectedGroup);
 
@@ -282,9 +289,26 @@ namespace Macro.ViewModels
                 if (SelectedSequence != null)
                 {
                     if (!string.IsNullOrEmpty(SelectedSequence.SuccessJumpId)) forceIncludeIds.Add(SelectedSequence.SuccessJumpId);
-                    if (SelectedSequence.PreCondition != null && !string.IsNullOrEmpty(SelectedSequence.PreCondition.FailJumpId)) forceIncludeIds.Add(SelectedSequence.PreCondition.FailJumpId);
+                    
+                    if (SelectedSequence.PreCondition != null)
+                    {
+                        if (!string.IsNullOrEmpty(SelectedSequence.PreCondition.FailJumpId)) forceIncludeIds.Add(SelectedSequence.PreCondition.FailJumpId);
+                        if (SelectedSequence.PreCondition is SwitchCaseCondition preSwitch)
+                        {
+                            foreach (var c in preSwitch.Cases) if (!string.IsNullOrEmpty(c.JumpId)) forceIncludeIds.Add(c.JumpId);
+                        }
+                    }
+
                     if (SelectedSequence.Action != null && !string.IsNullOrEmpty(SelectedSequence.Action.FailJumpId)) forceIncludeIds.Add(SelectedSequence.Action.FailJumpId);
-                    if (SelectedSequence.PostCondition != null && !string.IsNullOrEmpty(SelectedSequence.PostCondition.FailJumpId)) forceIncludeIds.Add(SelectedSequence.PostCondition.FailJumpId);
+                    
+                    if (SelectedSequence.PostCondition != null)
+                    {
+                        if (!string.IsNullOrEmpty(SelectedSequence.PostCondition.FailJumpId)) forceIncludeIds.Add(SelectedSequence.PostCondition.FailJumpId);
+                        if (SelectedSequence.PostCondition is SwitchCaseCondition postSwitch)
+                        {
+                            foreach (var c in postSwitch.Cases) if (!string.IsNullOrEmpty(c.JumpId)) forceIncludeIds.Add(c.JumpId);
+                        }
+                    }
                 }
 
                 // [Fix] Race Condition Prevention
@@ -586,6 +610,8 @@ namespace Macro.ViewModels
                 _isLoading = false;
                 UpdateJumpTargets();
                 UpdateGroupJumpTargets();
+                UpdateAvailableIntVariables();
+                UpdateAvailableCoordinateVariables();
             }
         }
 
@@ -640,9 +666,25 @@ namespace Macro.ViewModels
                 if (node is SequenceItem item)
                 {
                     if (item.SuccessJumpId == oldId) item.SuccessJumpId = newId;
-                    if (item.PreCondition?.FailJumpId == oldId) item.PreCondition.FailJumpId = newId;
+                    
+                    UpdateConditionJumpReferences(item.PreCondition, oldId, newId);
                     if (item.Action?.FailJumpId == oldId) item.Action.FailJumpId = newId;
-                    if (item.PostCondition?.FailJumpId == oldId) item.PostCondition.FailJumpId = newId;
+                    UpdateConditionJumpReferences(item.PostCondition, oldId, newId);
+                }
+            }
+        }
+
+        private void UpdateConditionJumpReferences(IMacroCondition? condition, string oldId, string newId)
+        {
+            if (condition == null) return;
+
+            if (condition.FailJumpId == oldId) condition.FailJumpId = newId;
+
+            if (condition is SwitchCaseCondition switchCase)
+            {
+                foreach (var c in switchCase.Cases)
+                {
+                    if (c.JumpId == oldId) c.JumpId = newId;
                 }
             }
         }
@@ -1417,6 +1459,7 @@ namespace Macro.ViewModels
                     var result = ImageSearchService.FindImageDetailed(captureSource, targetPath, condition.Threshold, searchRoi, scaleX, scaleY);
 
                     condition.TestScore = result.Score;
+                    MacroEngineService.Instance.AddLog($"[Test Match] Score: {result.Score:F4} (Threshold: {condition.Threshold}), Scale: {scaleX:F2}x{scaleY:F2}, ROI: {searchRoi}");
 
                     using (var mat = BitmapSourceConverter.ToMat(captureSource))
                     {

@@ -587,10 +587,51 @@
         <!-- 3-1. TextTypeAction (Direct) -->
         <DataTemplate DataType="{x:Type models:TextTypeAction}">
             <StackPanel Margin="5">
+                <TextBlock Text="입력 소스 (Input Source):" Margin="0,0,0,5" Foreground="Gray"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <RadioButton Content="직접 입력 (Direct)" GroupName="TextInputSrc" Margin="0,0,15,0"
+                                 IsChecked="{Binding InputMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Direct}"/>
+                    <RadioButton Content="변수값 (Variable)" GroupName="TextInputSrc"
+                                 IsChecked="{Binding InputMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+                                 ToolTip="변수에 저장된 값을 입력합니다."/>
+                </StackPanel>
+
+                <!-- Direct Mode Input -->
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                    <DockPanel.Style>
+                        <Style TargetType="DockPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding InputMode}" Value="Direct">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DockPanel.Style>
                     <TextBlock Text="텍스트:" VerticalAlignment="Center" Width="70"/>
                     <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" ToolTip="입력할 문자열 (Shift 자동 처리)"/>
                 </DockPanel>
+
+                <!-- Variable Mode Input -->
+                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                    <DockPanel.Style>
+                        <Style TargetType="DockPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding InputMode}" Value="Variable">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DockPanel.Style>
+                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox IsEditable="True" 
+                              ItemsSource="{Binding DataContext.AvailableIntVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedValuePath="."
+                              Text="{Binding VariableName, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="입력할 값을 가진 변수를 선택하세요."/>
+                </DockPanel>
+
                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
                     <TextBlock Text="입력 간격:" VerticalAlignment="Center" Width="70"/>
                     <TextBox Text="{Binding IntervalMs, UpdateSourceTrigger=PropertyChanged}" Width="50" HorizontalAlignment="Left"/>

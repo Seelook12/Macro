@@ -320,16 +320,34 @@ namespace Macro.ViewModels
         {
             if (group.IsStartGroup) return;
 
-            int index = Groups.IndexOf(group);
-            if (index > 1) Groups.Move(index, index - 1);
+            var parent = FindParentGroup(group);
+            if (parent != null)
+            {
+                int index = parent.Nodes.IndexOf(group);
+                if (index > 0) parent.Nodes.Move(index, index - 1);
+            }
+            else
+            {
+                int index = Groups.IndexOf(group);
+                if (index > 1) Groups.Move(index, index - 1);
+            }
         }
 
         private void MoveGroupDown(SequenceGroup group)
         {
             if (group.IsStartGroup) return;
 
-            int index = Groups.IndexOf(group);
-            if (index < Groups.Count - 1) Groups.Move(index, index + 1);
+            var parent = FindParentGroup(group);
+            if (parent != null)
+            {
+                int index = parent.Nodes.IndexOf(group);
+                if (index >= 0 && index < parent.Nodes.Count - 1) parent.Nodes.Move(index, index + 1);
+            }
+            else
+            {
+                int index = Groups.IndexOf(group);
+                if (index >= 0 && index < Groups.Count - 1) Groups.Move(index, index + 1);
+            }
         }
 
         private void MoveSequenceUp(SequenceItem item)

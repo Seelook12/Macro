@@ -51,6 +51,10 @@ namespace Macro.Views
                             var capture = ScreenCaptureHelper.GetScreenCapture();
                             var bounds = ScreenCaptureHelper.GetScreenBounds();
                             
+                            if (capture == null) return;
+
+                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
+                            
                             // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
                             var picker = new CoordinatePickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
                             var result = picker.ShowDialog();
@@ -89,6 +93,10 @@ namespace Macro.Views
 
                             var capture = ScreenCaptureHelper.GetScreenCapture();
                             var bounds = ScreenCaptureHelper.GetScreenBounds();
+                            
+                            if (capture == null) return;
+
+                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
 
                             // RegionPickerWindow도 물리 좌표계 기준으로 생성 필요 (추후 수정 필요할 수 있음)
                             // 현재는 생성자 변경 없이 사용하되, 반환값 처리를 물리 픽셀로 가정
@@ -134,6 +142,10 @@ namespace Macro.Views
                             
                             var capture = ScreenCaptureHelper.GetScreenCapture();
                             var bounds = ScreenCaptureHelper.GetScreenBounds();
+                            
+                            if (capture == null) return;
+
+                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
                             
                             var picker = new RegionPickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
                             var result = picker.ShowDialog();

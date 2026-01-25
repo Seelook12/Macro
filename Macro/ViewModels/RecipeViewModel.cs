@@ -77,7 +77,11 @@ namespace Macro.ViewModels
                 var current = RecipeManager.Instance.CurrentRecipe;
                 if (current != null)
                 {
-                    SelectedRecipe = Recipes.FirstOrDefault(r => r.FilePath == current.FilePath);
+                    var match = Recipes.FirstOrDefault(r => r.FilePath == current.FilePath);
+                    if (match != null)
+                    {
+                        SelectedRecipe = match;
+                    }
                 }
             }
             catch (Exception ex)

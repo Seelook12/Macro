@@ -33,7 +33,7 @@ namespace Macro.Utils
             return (minX, minY, maxX - minX, maxY - minY);
         }
 
-        public static BitmapSource GetScreenCapture()
+        public static BitmapSource? GetScreenCapture()
         {
             var bounds = GetScreenBounds();
 

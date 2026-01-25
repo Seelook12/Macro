@@ -215,6 +215,9 @@ namespace Macro.ViewModels
                     group.RefWindowWidth = parentGroupContext.RefWindowWidth;
                     group.RefWindowHeight = parentGroupContext.RefWindowHeight;
                 }
+                
+                // _engineService.AddLog($"[Debug] Flatten Group: {group.Name}, Mode: {group.CoordinateMode}, RefW: {group.RefWindowWidth}");
+                _engineService.AddLog($"[Debug] Flatten Group: {group.Name}, Mode: {group.CoordinateMode}, RefW: {group.RefWindowWidth}");
 
                 if (group.IsStartGroup)
                 {
@@ -258,6 +261,9 @@ namespace Macro.ViewModels
                         item.PostCondition = parentGroupContext.PostCondition;
                     }
                 }
+                
+                // _engineService.AddLog($"[Debug] Flatten Item: {item.Name}, RefW: {item.RefWindowWidth}");
+                _engineService.AddLog($"[Debug] Flatten Item: {item.Name}, RefW: {item.RefWindowWidth}");
 
                 // [Variable Injection]
                 if (item.Action is MouseClickAction mouseAction)

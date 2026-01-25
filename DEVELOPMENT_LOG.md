@@ -237,6 +237,37 @@
     - **XAML Resource Error 해결**: 특정 조건 선택 시 `EnumToBooleanConverter`를 찾지 못하던 `XamlParseException` 해결을 위해 로컬 리소스 등록 보강.
     - **Refresh Command 개선**: `RefreshContextTargetCommand`가 개별 조건 객체의 검색 기준 설정을 인식하여 목록을 갱신하도록 범용성 확보.
 
+### 3.27. 실행 엔진 안정성 강화 및 디버깅 고도화 (2026-01-25)
+- **Deadlock Fix**: `ImageMatchCondition` 및 `GrayChangeCondition` 실행 시 불필요한 UI 스레드 동기화(`Dispatcher.Invoke`)를 제거하여, 루프 실행 중 발생하던 멈춤 현상(데드락) 해결. `ScreenCaptureHelper`를 백그라운드 스레드에서 직접 호출하고 `Freeze()`로 안전성 확보.
+- **Debug Logging**: 
+    - `MacroEngineService`의 좌표 설정 단계(`ConfigureRelativeCoordinates`)에 타겟 윈도우 감지 로그(`TargetProcessName`, `hWnd`) 추가.
+    - `ImageMatchCondition`에 ROI 영역 및 스케일(`ScaleX/Y`) 계산 로그 추가.
+    - 이를 통해 다단계 중첩 그룹(`ParentRelative`) 구조에서의 좌표계 상속 및 타겟팅 문제를 정밀하게 추적 가능하도록 개선.
+- **Log Persistence**: 
+    - 프로그램 실행 시 `Logs/Log_yyyyMMdd_HHmmss.txt` 파일을 자동 생성.
+    - 대시보드의 모든 실행 로그를 파일로 실시간 저장하는 기능을 구현하여 사후 분석 지원.
+- **Code Clean-up**: `UriToBitmapConverter`, `ScreenCaptureHelper`, `TeachingView` 등에서 발생하던 주요 Nullable 관련 컴파일 경고 해결 및 예외 처리 강화.
+
+### 3.28. 이미지 매칭 정확도 개선 및 자동 ROI 도입 (2026-01-25)
+- **Auto ROI (Window-Based)**: 
+    - `WindowRelative` 모드에서 영역(`UseRegion`) 미지정 시, 전체 화면 대신 타겟 윈도우 영역만 검색하도록 자동 ROI 로직 구현.
+    - `ImageMatchCondition`에 `SetContextSize` 메서드 추가 및 실행 엔진(`MacroEngineService`)을 통한 윈도우 크기 동적 주입.
+    - 이를 통해 듀얼 모니터 환경이나 창 크기 변화 시에도 티칭 당시의 의도를 정확히 반영하도록 매칭 성공률 향상.
+- **Enhanced Debugging**:
+    - 매칭 실패 시 최고 점수(`Best Score`) 및 임계값(`Threshold`) 정보를 로그로 출력하여 원인 분석 지원.
+    - 평탄화(`Flattening`) 과정에서 그룹별 기준 해상도(`RefWindowWidth/Height`) 상속 경로를 추적하는 로그 추가.
+- **Error Visualization**: 매칭 최종 실패 시 `Logs/DebugImages` 폴더에 ROI가 표시된 실패 화면(`Fail_*.png`)을 자동 저장하는 기능 추가.
+
+### 3.29. 티칭 에디터 단일 실행 로직 정교화 (2026-01-25)
+- **Pre-Condition Failure Handling**: 티칭 화면에서 개별 스텝 실행 시, 시작 조건(Pre-Condition)이 실패했음에도 액션이 실행되던 로직을 수정.
+- **Stop on Failure**: 조건 실패 시 로그를 출력하고 즉시 실행을 중단하도록 변경하여 실제 매크로 실행 엔진의 로직과 일관성 확보.
+
+### 3.30. `TextTypeAction` 변수 지원 및 입력 모드 다변화 (2026-01-25)
+- **Input Mode Selection**: `Direct`(직접 입력) 및 `Variable`(변수 사용) 모드를 선택할 수 있는 라디오 버튼 추가.
+- **Variable Expansion**: `Direct` 모드에서 `{변수명}` 문법을 사용한 동적 텍스트 치환 기능 구현.
+- **Variable Selection UI**: `Variable` 모드 시 콤보박스를 통해 그룹 및 전역 변수 목록에서 입력값을 선택할 수 있는 UX 제공.
+- **Data Persistence & Binding Fix**: 레시피 로드 직후 변수 목록을 즉시 갱신하도록 `LoadData` 로직을 보완하여, 재로드 시 변수명이 UI에서 소실되던 바인딩 이슈 해결.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
 - **주요 해결 사항**: 

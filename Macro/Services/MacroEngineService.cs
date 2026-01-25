@@ -42,10 +42,36 @@ namespace Macro.Services
         private bool _isRunning;
         private CancellationTokenSource? _cts;
 
+        private string _currentLogFilePath = string.Empty;
+        private object _logLock = new object();
+
         // Constructor
         private MacroEngineService()
         {
             Logs = new ObservableCollection<string>();
+            InitializeLogFile();
+        }
+
+        private void InitializeLogFile()
+        {
+            try
+            {
+                string logDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                if (!System.IO.Directory.Exists(logDir))
+                {
+                    System.IO.Directory.CreateDirectory(logDir);
+                }
+
+                string fileName = $"Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+                _currentLogFilePath = System.IO.Path.Combine(logDir, fileName);
+                
+                // 파일 생성 및 헤더 작성
+                System.IO.File.WriteAllText(_currentLogFilePath, $"=== Log Started at {DateTime.Now} ==={Environment.NewLine}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize log file: {ex.Message}");
+            }
         }
 
         // Properties
@@ -222,16 +248,13 @@ namespace Macro.Services
                                                             // 2. Action 실행 전 데이터 주입 (GrayChangeCondition 등)
                                                             if (item.PostCondition is GrayChangeCondition gcc)
                                                             {
-                                                                // Dispatcher.Invoke는 데드락 위험이 있으므로 가능한 한 지양하거나, 
-                                                                // ScreenCaptureHelper 내부에서 처리하도록 유도해야 함.
+                                                                // Dispatcher.Invoke 제거: 데드락 방지 및 성능 향상
                                                                 var captureData = await Task.Run(() => 
                                                                 {
-                                                                    return System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
-                                                                    {
-                                                                        var bmp = ScreenCaptureHelper.GetScreenCapture();
-                                                                        var bounds = ScreenCaptureHelper.GetScreenBounds();
-                                                                        return new { Image = bmp, Bounds = bounds };
-                                                                    });
+                                                                    var bmp = ScreenCaptureHelper.GetScreenCapture();
+                                                                    var bounds = ScreenCaptureHelper.GetScreenBounds();
+                                                                    bmp?.Freeze();
+                                                                    return new { Image = bmp, Bounds = bounds };
                                                                 });
                         
                                                                 if (captureData?.Image != null)
@@ -403,7 +426,7 @@ namespace Macro.Services
                         }
 
                         // Short delay to prevent tight loops
-                        await Task.Delay(50, token);
+                        await Task.Delay(100, token);
                     }
                 }, token);
 
@@ -471,7 +494,8 @@ namespace Macro.Services
                         }
                         else
                         {
-                            AddLog("  -> 조건 불만족 (하지만 동작은 수행함)");
+                            AddLog("  -> 조건 불만족으로 인해 실행을 중단합니다.");
+                            return;
                         }
                     }
 
@@ -480,12 +504,10 @@ namespace Macro.Services
                     {
                         var captureData = await Task.Run(() => 
                         {
-                            return System.Windows.Application.Current?.Dispatcher?.Invoke(() => 
-                            {
-                                var bmp = ScreenCaptureHelper.GetScreenCapture();
-                                var bounds = ScreenCaptureHelper.GetScreenBounds();
-                                return new { Image = bmp, Bounds = bounds };
-                            });
+                            var bmp = ScreenCaptureHelper.GetScreenCapture();
+                            var bounds = ScreenCaptureHelper.GetScreenBounds();
+                            bmp?.Freeze();
+                            return new { Image = bmp, Bounds = bounds };
                         });
                 
                         if (captureData?.Image != null)
@@ -527,6 +549,20 @@ namespace Macro.Services
         {
             string timeStampedMessage = $"[{DateTime.Now:HH:mm:ss}] {message}";
 
+            // 1. File Logging
+            if (!string.IsNullOrEmpty(_currentLogFilePath))
+            {
+                lock (_logLock)
+                {
+                    try
+                    {
+                        System.IO.File.AppendAllText(_currentLogFilePath, timeStampedMessage + Environment.NewLine);
+                    }
+                    catch { /* Ignore file errors to prevent app crash */ }
+                }
+            }
+
+            // 2. UI Logging
             // Ensure UI update happens on the main thread
             RxApp.MainThreadScheduler.Schedule(() =>
             {
@@ -594,6 +630,8 @@ namespace Macro.Services
                     throw new Exception($"Window with title containing '{item.TargetProcessName}' not found.");
             }
 
+            AddLog($"[Debug] 타겟 윈도우 설정: '{item.TargetProcessName}' (hWnd: {hWnd})");
+
             // Apply Window State
             int nCmdShow = InputHelper.SW_RESTORE;
             bool needStateChange = false;
@@ -653,13 +691,21 @@ namespace Macro.Services
 
             // Apply to all components
             if (item.PreCondition is ISupportCoordinateTransform pre) 
+            {
                 pre.SetTransform(scaleX, scaleY, pt.X, pt.Y);
+                if (pre is ImageMatchCondition imgPre) imgPre.SetContextSize(clientRect.Width, clientRect.Height);
+            }
             
             if (item.Action is ISupportCoordinateTransform act) 
+            {
                 act.SetTransform(scaleX, scaleY, pt.X, pt.Y);
+            }
             
             if (item.PostCondition is ISupportCoordinateTransform post) 
+            {
                 post.SetTransform(scaleX, scaleY, pt.X, pt.Y);
+                if (post is ImageMatchCondition imgPost) imgPost.SetContextSize(clientRect.Width, clientRect.Height);
+            }
         }
     }
 }

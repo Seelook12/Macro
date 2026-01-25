@@ -277,7 +277,12 @@ namespace Macro.Views
             {
                 DebugLogger.Log($"[View] ComboBox DataContextChanged. Old: {e.OldValue?.GetType().Name}, New: {e.NewValue?.GetType().Name}");
                 
-                // Manual binding update removed to avoid conflict with Proxy Property
+                // [Fix] Force binding update for SwitchCaseItem
+                if (e.NewValue is SwitchCaseItem)
+                {
+                     var binding = System.Windows.Data.BindingOperations.GetBindingExpression(comboBox, ComboBox.SelectedValueProperty);
+                     binding?.UpdateTarget();
+                }
             }
         }
 
@@ -287,7 +292,13 @@ namespace Macro.Views
             {
                 DebugLogger.Log($"[View] ComboBox Loaded. Initial SelectedValue: {comboBox.SelectedValue}");
                 
-                // Manual binding update removed to avoid conflict with Proxy Property
+                // [Fix] Force binding update for SwitchCaseItem to restore selection
+                // because the JumpTargets list might be swapped during view transitions.
+                if (comboBox.DataContext is SwitchCaseItem)
+                {
+                     var binding = System.Windows.Data.BindingOperations.GetBindingExpression(comboBox, ComboBox.SelectedValueProperty);
+                     binding?.UpdateTarget();
+                }
             }
         }
     }

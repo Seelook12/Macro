@@ -1071,10 +1071,10 @@
                                                                         <DockPanel LastChildFill="True" Margin="0,0,0,5">
                                                                             <TextBlock Text="이미지:" VerticalAlignment="Center" Width="60"/>
                                                                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                                                                                <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
-                                                                                <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
-                                                                            </StackPanel>
-                                                                            <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
+                                                                                                                                <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="Select existing image file"/>
+                                                                                                                                <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="Snip from screen"/>
+                                                                                                                                <Button Content="Ref 갱신" Width="60" Margin="5,0,0,0" Command="{Binding DataContext.UpdateRefSizeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="현재 창 크기로 기준 해상도(Ref Size)를 갱신합니다." Background="#E0F7FA"/>
+                                                                                                                            </StackPanel>                                                                            <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
                                                                         </DockPanel>
                                                                         <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,5" Height="100" Background="#F8F8F8">
                                                                             <Image Source="{Binding ImagePath, Converter={StaticResource UriToBitmapConverter}}" Stretch="Uniform"/>
@@ -1398,10 +1398,10 @@
                                                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
                                                     <TextBlock Text="이미지:" VerticalAlignment="Center" Width="60"/>
                                                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                                                        <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
-                                                        <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
-                                                    </StackPanel>
-                                                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
+                                                                                                        <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="Select existing image file"/>
+                                                                                                        <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="Snip from screen"/>
+                                                                                                        <Button Content="Ref 갱신" Width="60" Margin="5,0,0,0" Command="{Binding DataContext.UpdateRefSizeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="현재 창 크기로 기준 해상도(Ref Size)를 갱신합니다." Background="#E0F7FA"/>
+                                                                                                    </StackPanel>                                                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
                                                 </DockPanel>
                                                 <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,5" Height="100" Background="#F8F8F8">
                                                     <Image Source="{Binding ImagePath, Converter={StaticResource UriToBitmapConverter}}" Stretch="Uniform"/>
@@ -1726,10 +1726,10 @@
                                                 <DockPanel LastChildFill="True" Margin="0,0,0,5">
                                                     <TextBlock Text="이미지:" VerticalAlignment="Center" Width="60"/>
                                                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                                                        <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
-                                                        <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}"/>
-                                                    </StackPanel>
-                                                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
+                                                                                                        <Button Content="파일 선택" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.SelectImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="Select existing image file"/>
+                                                                                                        <Button Content="화면 캡처" Width="70" Margin="5,0,0,0" Command="{Binding DataContext.CaptureImageCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="Snip from screen"/>
+                                                                                                        <Button Content="Ref 갱신" Width="60" Margin="5,0,0,0" Command="{Binding DataContext.UpdateRefSizeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip="현재 창 크기로 기준 해상도(Ref Size)를 갱신합니다." Background="#E0F7FA"/>
+                                                                                                    </StackPanel>                                                    <TextBox Text="{Binding ImagePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsReadOnly="True"/>
                                                 </DockPanel>
                                                 <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,5" Height="100" Background="#F8F8F8">
                                                     <Image Source="{Binding ImagePath, Converter={StaticResource UriToBitmapConverter}}" Stretch="Uniform"/>

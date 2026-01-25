@@ -32,6 +32,7 @@ namespace Macro.ViewModels
 
         public ReactiveCommand<ImageMatchCondition, Unit> SelectImageCommand { get; private set; } = null!;
         public ReactiveCommand<ImageMatchCondition, Unit> CaptureImageCommand { get; private set; } = null!;
+        public ReactiveCommand<ImageMatchCondition, Unit> UpdateRefSizeCommand { get; private set; } = null!;
         public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; private set; } = null!;
         public ReactiveCommand<object, Unit> PickRegionCommand { get; private set; } = null!;
         public ReactiveCommand<WindowControlAction, Unit> RefreshTargetListCommand { get; private set; } = null!;
@@ -218,6 +219,7 @@ namespace Macro.ViewModels
 
             SelectImageCommand = ReactiveCommand.Create<ImageMatchCondition>(SelectImage);
             CaptureImageCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(CaptureImageAsync);
+            UpdateRefSizeCommand = ReactiveCommand.Create<ImageMatchCondition>(UpdateCurrentGroupReferenceSize);
             TestImageConditionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(TestImageConditionAsync);
             PickRegionCommand = ReactiveCommand.Create<object>(PickRegion);
         }
@@ -542,6 +544,7 @@ namespace Macro.ViewModels
             if (dlg.ShowDialog() == true)
             {
                 SaveImageToRecipe(condition, dlg.FileName);
+                UpdateCurrentGroupReferenceSize(condition);
             }
         }
 
@@ -555,6 +558,36 @@ namespace Macro.ViewModels
             {
                 SaveImageToRecipe(condition, tempPath);
                 try { System.IO.File.Delete(tempPath); } catch { }
+                UpdateCurrentGroupReferenceSize(condition);
+            }
+        }
+
+        private void UpdateCurrentGroupReferenceSize(IMacroCondition targetCondition)
+        {
+            SequenceGroup? groupToUpdate = null;
+
+            if (SelectedSequence != null)
+            {
+                if (SelectedSequence.PreCondition == targetCondition || 
+                    SelectedSequence.PostCondition == targetCondition)
+                {
+                    groupToUpdate = GetEffectiveGroupContext(SelectedSequence);
+                }
+            }
+            
+            if (groupToUpdate == null && SelectedGroup != null)
+            {
+                groupToUpdate = ResolveGroupContext(SelectedGroup);
+            }
+
+            if (groupToUpdate != null && groupToUpdate.CoordinateMode == CoordinateMode.WindowRelative)
+            {
+                 var winInfo = GetTargetWindowInfo(groupToUpdate);
+                 if (winInfo.HasValue)
+                 {
+                     groupToUpdate.RefWindowWidth = winInfo.Value.Width;
+                     groupToUpdate.RefWindowHeight = winInfo.Value.Height;
+                 }
             }
         }
 

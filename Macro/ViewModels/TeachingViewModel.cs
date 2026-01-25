@@ -243,19 +243,16 @@ namespace Macro.ViewModels
 
                     _selectedSequence = value;
                     
-                    this.RaisePropertyChanged(nameof(SelectedSequence));
-                    
                     NotifyTypeChanges();
                     UpdateAvailableCoordinateVariables();
                     UpdateAvailableIntVariables();
 
-                    // [Fix] Defer JumpTarget update to prevent ComboBox from clearing selection
-                    // Wait for the View to update its binding context (SelectedSequence) BEFORE changing the ItemsSource (JumpTargets).
-                    System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        UpdateJumpTargets();
-                        DebugLogger.Log($"[VM] SelectedSequence Changed & Targets Updated");
-                    });
+                    this.RaisePropertyChanged(nameof(SelectedSequence));
+
+                    // [Fix] Call Synchronously to ensure JumpTargets are ready before View binding updates.
+                    // Previous race condition (ComboBox clearing selection) is handled by swapping the collection instance in UpdateJumpTargets.
+                    UpdateJumpTargets();
+                    DebugLogger.Log($"[VM] SelectedSequence Changed & Targets Updated");
                 }
             }
         }

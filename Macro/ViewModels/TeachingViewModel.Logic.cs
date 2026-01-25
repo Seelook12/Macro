@@ -457,49 +457,9 @@ namespace Macro.ViewModels
         {
             if (item == null) return;
 
-            var contextGroup = GetEffectiveGroupContext(item);
-            if (contextGroup != null)
-            {
-                // Inject effective context into the item for the engine
-                item.CoordinateMode = contextGroup.CoordinateMode;
-                item.ContextSearchMethod = contextGroup.ContextSearchMethod;
-                item.TargetProcessName = contextGroup.TargetProcessName;
-                item.ContextWindowState = contextGroup.ContextWindowState;
-                item.ProcessNotFoundJumpName = contextGroup.ProcessNotFoundJumpName;
-                item.ProcessNotFoundJumpId = contextGroup.ProcessNotFoundJumpId;
-                item.RefWindowWidth = contextGroup.RefWindowWidth;
-                item.RefWindowHeight = contextGroup.RefWindowHeight;
-            }
-
-            // [Variable Injection for Single Step]
-            if (item.Action is MouseClickAction mouseAction)
-            {
-                var runtimeVars = new Dictionary<string, System.Windows.Point>();
-                
-                // Traverse up to collect variables. 
-                var hierarchy = new Stack<SequenceGroup>();
-                var current = FindParentGroup(item);
-                while (current != null)
-                {
-                    hierarchy.Push(current);
-                    current = FindParentGroup(current);
-                }
-
-                // Apply variables from Root -> Leaf (Inner overrides Outer)
-                while (hierarchy.Count > 0)
-                {
-                    var group = hierarchy.Pop();
-                    if (group.Variables != null)
-                    {
-                        foreach (var v in group.Variables)
-                        {
-                            runtimeVars[v.Name] = new System.Windows.Point(v.X, v.Y);
-                        }
-                    }
-                }
-
-                mouseAction.RuntimeContextVariables = runtimeVars;
-            }
+            // [Refactoring] Use RecipeCompiler to prepare the item for execution
+            // This ensures consistency between Test Run (here) and Actual Run (Dashboard)
+            RecipeCompiler.Instance.CompileSingleStep(item, Groups);
 
             await MacroEngineService.Instance.RunSingleStepAsync(item);
         }

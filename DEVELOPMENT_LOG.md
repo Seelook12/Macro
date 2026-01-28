@@ -262,11 +262,34 @@
 - **Pre-Condition Failure Handling**: 티칭 화면에서 개별 스텝 실행 시, 시작 조건(Pre-Condition)이 실패했음에도 액션이 실행되던 로직을 수정.
 - **Stop on Failure**: 조건 실패 시 로그를 출력하고 즉시 실행을 중단하도록 변경하여 실제 매크로 실행 엔진의 로직과 일관성 확보.
 
-### 3.30. `TextTypeAction` 변수 지원 및 입력 모드 다변화 (2026-01-25)
-- **Input Mode Selection**: `Direct`(직접 입력) 및 `Variable`(변수 사용) 모드를 선택할 수 있는 라디오 버튼 추가.
-- **Variable Expansion**: `Direct` 모드에서 `{변수명}` 문법을 사용한 동적 텍스트 치환 기능 구현.
-- **Variable Selection UI**: `Variable` 모드 시 콤보박스를 통해 그룹 및 전역 변수 목록에서 입력값을 선택할 수 있는 UX 제공.
-- **Data Persistence & Binding Fix**: 레시피 로드 직후 변수 목록을 즉시 갱신하도록 `LoadData` 로직을 보완하여, 재로드 시 변수명이 UI에서 소실되던 바인딩 이슈 해결.
+### 3.31. 그룹 설정 UI 바인딩 수정 (2026-01-26)
+- **Group Post-Condition SwitchCase Fix**:
+    - 그룹 설정의 '완료 확인 및 조건부 분기'에서 `Switch Case` 사용 시, 점프 대상 목록(`ComboBox`)이 스텝 레벨(`JumpTargets`)로 잘못 표시되던 문제 수정.
+    - 해당 섹션 전용 `DataTemplate`을 정의하고 `AvailableGroupExitTargets`로 명시적 바인딩하여, 그룹 흐름 제어와 동일한 뎁스(Sibling Groups)의 점프 대상만 표시되도록 개선.
+- **VariableSetAction Binding Fix**:
+    - 변수 설정 액션(`VariableSetAction`)에서 변수명 입력 시 값이 저장되지 않거나 초기화되는 문제 해결.
+    - `ComboBox`의 `SelectedValuePath="."` 속성이 사용자 입력(Custom Text) 바인딩과 충돌하는 것을 확인하여 제거하고, `Text` 바인딩에 `Mode=TwoWay`를 명시적으로 적용.
+
+### 3.32. 그룹 설정 데이터 유실 방지 및 바인딩 보호 (2026-01-27)
+- **현상**: 그룹 설정의 '완료 확인 및 조건부 분기' 내에서 설정한 점프 ID(Switch Case 이동, 실패 시 이동)가 다른 그룹을 클릭한 후 저장하면 삭제되는 현상 발생.
+- **원인 분석**: 
+    - 해당 영역의 ComboBox들이 모델 객체(`SwitchCaseItem`, `IMacroCondition`)에 직접 Two-Way 바인딩되어 있었음.
+    - 그룹 이동 시 점프 타겟 리스트(`AvailableGroupExitTargets`)가 새 그룹 기준으로 교체되는데, 이때 화면에 남아있던 이전 그룹의 ComboBox가 "현재 값이 목록에 없음"을 감지하고 모델의 값을 `null`로 덮어씌움.
+- **해결 방안 (Proxy & Protection)**:
+    - **`SwitchCaseItemViewModel` 도입**: 모델 아이템을 래핑하고, 점프 타겟 리스트가 갱신 중(`_isUpdatingGroupTargets`)일 때는 UI로부터의 값 변경 요청을 무시하는 보호 로직 추가.
+    - **`SelectedGroupPostConditionFailJumpId` 프록시 속성**: 그룹 레벨의 실패 시 이동(`FailJumpId`) 전용 보호 속성을 `TeachingViewModel`에 추가.
+    - **UI 바인딩 교체**: `TeachingView.xaml`의 모든 그룹 포스트 컨디션 템플릿에서 모델 직접 바인딩을 이 보호된 프록시 속성들로 전면 교체.
+- **결과**: 그룹 간 전환 시에도 데이터가 원천적으로 보호되며, 불필요한 렉(Lag) 없이 안정적으로 데이터가 유지됨.
+
+### 3.33. 티칭 UI 컴포넌트 표준화 및 바인딩 안정화 (2026-01-28)
+- **전용 선택 컨트롤 도입**:
+    - **`JumpTargetSelector`**: 점프 대상(Guid Id) 선택 전용 컨트롤. 목록 갱신(`Clear/Add`) 시 WPF가 선택값을 `null`로 밀어내는 현상을 컨트롤 내부에서 차단(보호 로직)하고, 그룹/스텝별 아이콘 스타일을 내장함.
+    - **`VariableSelector`**: 변수명 및 프로세스 이름 입력 전용 컨트롤. `IsEditable="True"`를 기본으로 하며, 텍스트 입력 시 즉시 뷰모델에 반영되도록 `UpdateSourceTrigger=PropertyChanged` 바인딩을 최적화함.
+- **바인딩 버그 수정 및 안정화**:
+    - **Switch Case 데이터 유실 해결**: 스텝 에디터의 Switch Case가 모델을 직접 바인딩하던 구조에서 `StepPre/PostSwitchCases` Proxy 컬렉션을 사용하도록 개선하여 데이터 유실 방지.
+    - **변수명 초기화 오류 수정**: `UpdateGroupProxyProperties`에서 변수명을 강제로 `string.Empty`로 리셋하던 잔재 코드를 제거하여, `VariableSelector`와 바인딩 충돌로 데이터가 날아가던 문제 해결.
+    - **명시적 동기화**: `Add/RemoveSwitchCaseCommand` 실행 시 Proxy 컬렉션(`SyncStepSwitchCases`)을 명시적으로 호출하여 UI가 즉시 갱신되도록 보완.
+- **코드 정제**: `TeachingView.xaml.cs`에 흩어져 있던 임시 보호용 이벤트 핸들러들을 제거하고, XAML 코드를 커스텀 컨트롤 기반으로 단순화하여 유지보수성 향상.
 
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)

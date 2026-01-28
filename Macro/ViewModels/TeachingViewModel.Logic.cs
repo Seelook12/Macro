@@ -19,106 +19,159 @@ namespace Macro.ViewModels
     {
         #region Logic & Helpers
 
-        private void UpdateGroupJumpTargets()
+                        private void UpdateGroupJumpTargets(SequenceGroup? oldGroup = null)
 
-        {
+                        {
 
-            _isUpdatingGroupTargets = true;
+                            _isUpdatingGroupTargets = true;
 
-            try
+                            try
 
-            {
+                            {
 
-                DebugLogger.Log("[Logic] UpdateGroupJumpTargets Started");
+                                DebugLogger.Log("[Logic] UpdateGroupJumpTargets Started");
 
+                
 
+                                var newEntryTargets = new ObservableCollection<JumpTargetViewModel>();
 
-                AvailableGroupEntryTargets.Clear();
+                                var newExitTargets = new ObservableCollection<JumpTargetViewModel>();
 
-                AvailableGroupExitTargets.Clear();
+                
 
+                                if (SelectedGroup == null)
 
+                                {
 
-                if (SelectedGroup == null)
+                                    AvailableGroupEntryTargets = newEntryTargets;
 
-                {
+                                    AvailableGroupExitTargets = newExitTargets;
 
-                    return;
+                                    return;
 
-                }
+                                }
 
+                
 
+                                // 1. Entry Targets (Internal Nodes of SelectedGroup)
 
-                // 1. Entry Targets (Internal Nodes of SelectedGroup)
+                                AddNodesToTargetList(SelectedGroup.Nodes, newEntryTargets, new HashSet<string>(), true);
 
-                AddNodesToTargetList(SelectedGroup.Nodes, AvailableGroupEntryTargets, new HashSet<string>(), true);
+                                DebugLogger.Log($"[Logic] EntryTargets Updated: Count={newEntryTargets.Count}");
 
-                DebugLogger.Log($"[Logic] EntryTargets Updated: Count={AvailableGroupEntryTargets.Count}");
+                
 
+                                // 2. Exit Targets (Siblings of SelectedGroup)
 
+                                newExitTargets.Add(new JumpTargetViewModel { Id = "(Next Step)", DisplayName = "(Next Step)", IsGroup = false });
 
-                // 2. Exit Targets (Siblings of SelectedGroup)
+                                newExitTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
 
-                AvailableGroupExitTargets.Add(new JumpTargetViewModel { Id = "(Next Step)", DisplayName = "(Next Step)", IsGroup = false });
+                
 
-                AvailableGroupExitTargets.Add(new JumpTargetViewModel { Id = "(Stop Execution)", DisplayName = "(Stop Execution)", IsGroup = false });
+                                var parent = FindParentGroup(SelectedGroup);
 
+                                IEnumerable<ISequenceTreeNode> siblings = (parent != null) ? parent.Nodes : Groups.Cast<ISequenceTreeNode>();
 
+                
 
-                var parent = FindParentGroup(SelectedGroup);
+                                // For Exit targets, we also need to consider current value as forced
 
+                                var forceIds = new HashSet<string>();
 
+                                var endStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
 
-                IEnumerable<ISequenceTreeNode> siblings = (parent != null) ? parent.Nodes : Groups.Cast<ISequenceTreeNode>();
+                                if (endStep != null && !string.IsNullOrEmpty(endStep.SuccessJumpId)) forceIds.Add(endStep.SuccessJumpId);
 
+                
 
+                                // [Fix] Include SwitchCase JumpIds in Group PostCondition (Current Group)
 
+                                if (SelectedGroup.PostCondition is SwitchCaseCondition groupSwitch)
 
+                                {
 
+                                    foreach (var c in groupSwitch.Cases)
 
+                                    {
 
-                // For Exit targets, we also need to consider current value as forced
+                                        if (!string.IsNullOrEmpty(c.JumpId)) forceIds.Add(c.JumpId);
 
-                var forceIds = new HashSet<string>();
+                                    }
 
-                var endStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
+                                }
 
-                if (endStep != null && !string.IsNullOrEmpty(endStep.SuccessJumpId)) forceIds.Add(endStep.SuccessJumpId);
+                                if (SelectedGroup.PostCondition != null && !string.IsNullOrEmpty(SelectedGroup.PostCondition.FailJumpId))
 
-                // [Fix] Include SwitchCase JumpIds in Group PostCondition
-                if (SelectedGroup.PostCondition is SwitchCaseCondition groupSwitch)
-                {
-                    foreach (var c in groupSwitch.Cases)
-                    {
-                        if (!string.IsNullOrEmpty(c.JumpId)) forceIds.Add(c.JumpId);
+                                {
+
+                                    forceIds.Add(SelectedGroup.PostCondition.FailJumpId);
+
+                                }
+
+                
+
+                                // [BugFix] Also Include IDs from the Previous Group (oldGroup) to prevent binding loss (null) during View transition
+
+                                if (oldGroup != null)
+
+                                {
+
+                                    if (oldGroup.PostCondition is SwitchCaseCondition oldSwitch)
+
+                                    {
+
+                                        foreach (var c in oldSwitch.Cases)
+
+                                        {
+
+                                            if (!string.IsNullOrEmpty(c.JumpId)) forceIds.Add(c.JumpId);
+
+                                        }
+
+                                    }
+
+                                    if (oldGroup.PostCondition != null && !string.IsNullOrEmpty(oldGroup.PostCondition.FailJumpId))
+
+                                    {
+
+                                        forceIds.Add(oldGroup.PostCondition.FailJumpId);
+
+                                    }
+
+                                }
+
+                
+
+                                AddNodesToTargetList(siblings, newExitTargets, forceIds, false, SelectedGroup);
+
+        
+
+                        // Atomically swap the collections
+
+                        AvailableGroupEntryTargets = newEntryTargets;
+
+                        AvailableGroupExitTargets = newExitTargets;
+
+        
+
+                        DebugLogger.Log($"[Logic] ExitTargets Updated: Count={AvailableGroupExitTargets.Count}");
+
+        
+
+                        UpdateGroupProxyProperties();
+
                     }
+
+                    finally
+
+                    {
+
+                        _isUpdatingGroupTargets = false;
+
+                    }
+
                 }
-                if (SelectedGroup.PostCondition != null && !string.IsNullOrEmpty(SelectedGroup.PostCondition.FailJumpId))
-                {
-                    forceIds.Add(SelectedGroup.PostCondition.FailJumpId);
-                }
-
-                AddNodesToTargetList(siblings, AvailableGroupExitTargets, forceIds, false, SelectedGroup);
-
-
-
-                DebugLogger.Log($"[Logic] ExitTargets Updated: Count={AvailableGroupExitTargets.Count}");
-
-
-
-                UpdateGroupProxyProperties();
-
-            }
-
-            finally
-
-            {
-
-                _isUpdatingGroupTargets = false;
-
-            }
-
-        }
 
 
 
@@ -140,7 +193,129 @@ namespace Macro.ViewModels
 
                 var endStep = SelectedGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
 
-                _selectedGroupExitJumpId = endStep?.SuccessJumpId ?? string.Empty;
+                                _selectedGroupExitJumpId = endStep?.SuccessJumpId ?? string.Empty;
+
+                                
+
+                                                                                                // [Sync] Group PostCondition FailJumpId
+
+                                
+
+                                                                                                _selectedGroupPostConditionFailJumpId = SelectedGroup.PostCondition?.FailJumpId ?? string.Empty;
+
+                                
+
+                                                                
+
+                                
+
+                                                                                                // [Sync] Group PostCondition VariableName
+
+                                
+
+                                                                                                if (SelectedGroup.PostCondition is VariableCompareCondition vcc) _selectedGroupPostConditionVariableName = vcc.VariableName;
+
+                                
+
+                                                                                                else if (SelectedGroup.PostCondition is SwitchCaseCondition scc) _selectedGroupPostConditionVariableName = scc.TargetVariableName;
+
+                                
+
+                                                                                                else _selectedGroupPostConditionVariableName = string.Empty;
+
+                                
+
+                                                                
+
+                                
+
+                                                                                                // [Fix] Sync SwitchCase ViewModels for protection
+
+                                
+
+                                                                
+
+                                
+
+                                                                SyncGroupPostConditionCases();
+
+                                
+
+                                                            }
+
+                                
+
+                                                            else
+
+                                
+
+                                                            {
+
+                                
+
+                                                                _selectedGroupEntryJumpId = string.Empty;
+
+                                
+
+                                                                _selectedGroupExitJumpId = string.Empty;
+
+                                
+
+                                                                _selectedGroupPostConditionFailJumpId = string.Empty;
+
+                                
+
+                                                                _selectedGroupPostConditionVariableName = string.Empty;
+
+                                
+
+                                                                GroupPostConditionCases.Clear();
+
+                                
+
+                                                            }
+
+                                
+
+                                                
+
+                                
+
+                                                            this.RaisePropertyChanged(nameof(SelectedGroupEntryJumpId));
+
+                                
+
+                                                            this.RaisePropertyChanged(nameof(SelectedGroupExitJumpId));
+
+                                
+
+                                                            this.RaisePropertyChanged(nameof(SelectedGroupPostConditionFailJumpId));
+
+                                
+
+                                                            this.RaisePropertyChanged(nameof(SelectedGroupPostConditionVariableName));
+
+                        }
+
+
+
+        private void SyncGroupPostConditionCases()
+
+        {
+
+            if (SelectedGroup?.PostCondition is SwitchCaseCondition switchCase)
+
+            {
+
+                // 기존 리스트와 비교하여 갱신 (또는 단순 재생성)
+
+                var vms = switchCase.Cases.Select(c => new SwitchCaseItemViewModel(c, () => _isUpdatingGroupTargets)).ToList();
+
+                
+
+                GroupPostConditionCases.Clear();
+
+                foreach (var vm in vms) GroupPostConditionCases.Add(vm);
 
             }
 
@@ -148,103 +323,203 @@ namespace Macro.ViewModels
 
             {
 
-                _selectedGroupEntryJumpId = string.Empty;
-
-                _selectedGroupExitJumpId = string.Empty;
-
-            }
-
-
-
-            this.RaisePropertyChanged(nameof(SelectedGroupEntryJumpId));
-
-            this.RaisePropertyChanged(nameof(SelectedGroupExitJumpId));
-
-        }
-
-
-
-        private void AddNodesToTargetList(IEnumerable<ISequenceTreeNode> nodes, ObservableCollection<JumpTargetViewModel> targetList, HashSet<string> forceIncludeIds, bool isEntrySelection, ISequenceTreeNode? excludeNode = null)
-
-        {
-
-            foreach (var node in nodes)
-
-            {
-
-                if (node == excludeNode) continue;
-
-
-
-                if (node is SequenceItem item)
-
-                {
-
-                    // For Entry selection: Hide Start and End
-
-                    if (isEntrySelection && (item.IsGroupStart || item.IsGroupEnd)) continue;
-
-
-
-                    // For General/Exit selection: Hide Start
-
-                    if (!isEntrySelection && item.IsGroupStart) continue;
-
-
-
-                    string displayName = item.IsGroupEnd ? "(Finish Group)" : $"📄 {item.Name}";
-
-                    targetList.Add(new JumpTargetViewModel { Id = item.Id.ToString(), DisplayName = displayName, IsGroup = false });
-
-                }
-
-                else if (node is SequenceGroup group)
-
-                {
-
-                    var startNode = group.Nodes.FirstOrDefault();
-
-                    if (startNode != null)
-
-                    {
-
-                        targetList.Add(new JumpTargetViewModel { Id = startNode.Id.ToString(), DisplayName = $"📁 {group.Name}", IsGroup = true });
-
-                    }
-
-                }
-
-            }
-
-
-
-            // Fallback for forced IDs (Global Search) if not already in list
-
-            foreach (var id in forceIncludeIds)
-
-            {
-
-                if (string.IsNullOrEmpty(id) || id == "(Next Step)" || id == "(Stop Execution)" || id == "(Ignore & Continue)") continue;
-
-                if (targetList.Any(t => t.Id == id)) continue;
-
-
-
-                var node = FindNodeByIdRecursive(Groups, id);
-
-                if (node != null)
-
-                {
-
-                    string name = node is SequenceGroup g ? $"📁 {g.Name}" : $"📄 {node.Name}";
-
-                    targetList.Add(new JumpTargetViewModel { Id = id, DisplayName = name + " *", IsGroup = node is SequenceGroup });
-
-                }
+                GroupPostConditionCases.Clear();
 
             }
 
         }
+
+
+
+                                private void AddNodesToTargetList(IEnumerable<ISequenceTreeNode> nodes, ObservableCollection<JumpTargetViewModel> targetList, HashSet<string> forceIncludeIds, bool isEntrySelection, ISequenceTreeNode? excludeNode = null)
+
+
+
+                                {
+
+
+
+                                    // 1. Add Valid Siblings
+
+
+
+                                    foreach (var node in nodes)
+
+
+
+                                    {
+
+
+
+                                        if (node == excludeNode) continue;
+
+
+
+                        
+
+
+
+                                        if (node is SequenceItem item)
+
+
+
+                                        {
+
+
+
+                                            // For Entry selection: Hide Start and End
+
+
+
+                                            if (isEntrySelection && (item.IsGroupStart || item.IsGroupEnd)) continue;
+
+
+
+                        
+
+
+
+                                            // For General/Exit selection: Hide Start
+
+
+
+                                            if (!isEntrySelection && item.IsGroupStart) continue;
+
+
+
+                        
+
+
+
+                                            string displayName = item.IsGroupEnd ? "(Finish Group)" : $"📄 {item.Name}";
+
+
+
+                                            targetList.Add(new JumpTargetViewModel { Id = item.Id.ToString(), DisplayName = displayName, IsGroup = false });
+
+
+
+                                        }
+
+
+
+                                        else if (node is SequenceGroup group)
+
+
+
+                                        {
+
+
+
+                                            var startNode = group.Nodes.FirstOrDefault();
+
+
+
+                                            if (startNode != null)
+
+
+
+                                            {
+
+
+
+                                                targetList.Add(new JumpTargetViewModel { Id = startNode.Id.ToString(), DisplayName = $"📁 {group.Name}", IsGroup = true });
+
+
+
+                                            }
+
+
+
+                                        }
+
+
+
+                                    }
+
+
+
+                        
+
+
+
+                                    // 2. Handle Forced IDs (Current Settings)
+
+
+
+                                    foreach (var id in forceIncludeIds)
+
+
+
+                                    {
+
+
+
+                                        if (string.IsNullOrEmpty(id) || id == "(Next Step)" || id == "(Stop Execution)" || id == "(Ignore & Continue)") continue;
+
+
+
+                                        
+
+
+
+                                        // If already added as a valid sibling, skip
+
+
+
+                                        if (targetList.Any(t => t.Id == id)) continue;
+
+
+
+                        
+
+
+
+                                        var node = FindNodeByIdRecursive(Groups, id);
+
+
+
+                                        if (node != null)
+
+
+
+                                        {
+
+
+
+                                            string name = node is SequenceGroup g ? $"📁 {g.Name}" : $"📄 {node.Name}";
+
+
+
+                                            targetList.Add(new JumpTargetViewModel { Id = id, DisplayName = $"[외부] {name}", IsGroup = node is SequenceGroup });
+
+
+
+                                        }
+
+
+
+                                        else
+
+
+
+                                        {
+
+
+
+                                            targetList.Add(new JumpTargetViewModel { Id = id, DisplayName = $"[알 수 없음] {id}", IsGroup = false });
+
+
+
+                                        }
+
+
+
+                                    }
+
+
+
+                                }
 
 
 
@@ -376,6 +651,35 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedStepPreConditionFailJumpId));
             this.RaisePropertyChanged(nameof(SelectedStepActionFailJumpId));
             this.RaisePropertyChanged(nameof(SelectedStepPostConditionFailJumpId));
+
+            SyncStepSwitchCases();
+        }
+
+        private void SyncStepSwitchCases()
+        {
+            // 1. Pre-Condition
+            if (SelectedSequence?.PreCondition is SwitchCaseCondition preSwitch)
+            {
+                var vms = preSwitch.Cases.Select(c => new SwitchCaseItemViewModel(c, () => _isUpdatingGroupTargets)).ToList();
+                StepPreSwitchCases.Clear();
+                foreach (var vm in vms) StepPreSwitchCases.Add(vm);
+            }
+            else
+            {
+                StepPreSwitchCases.Clear();
+            }
+
+            // 2. Post-Condition
+            if (SelectedSequence?.PostCondition is SwitchCaseCondition postSwitch)
+            {
+                var vms = postSwitch.Cases.Select(c => new SwitchCaseItemViewModel(c, () => _isUpdatingGroupTargets)).ToList();
+                StepPostSwitchCases.Clear();
+                foreach (var vm in vms) StepPostSwitchCases.Add(vm);
+            }
+            else
+            {
+                StepPostSwitchCases.Clear();
+            }
         }
 
         public void UpdateAvailableCoordinateVariables()
@@ -455,7 +759,7 @@ namespace Macro.ViewModels
 
         private async Task RunSingleStepAsync(SequenceItem item)
         {
-            if (item == null) return;
+            if (item == null || Groups == null) return;
 
             // [Refactoring] Use RecipeCompiler to prepare the item for execution
             // This ensures consistency between Test Run (here) and Actual Run (Dashboard)

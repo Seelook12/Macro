@@ -11,7 +11,6 @@ using Macro.Utils;
 using Macro.ViewModels;
 using ReactiveUI;
 using UserControl = System.Windows.Controls.UserControl;
-using ComboBox = System.Windows.Controls.ComboBox;
 
 namespace Macro.Views
 {
@@ -267,39 +266,9 @@ namespace Macro.Views
             {
                 if (child is T parent) return parent;
                 child = System.Windows.Media.VisualTreeHelper.GetParent(child);
-            }
-            return null;
-        }
-
-        private void OnComboBoxDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            if (sender is ComboBox comboBox)
-            {
-                DebugLogger.Log($"[View] ComboBox DataContextChanged. Old: {e.OldValue?.GetType().Name}, New: {e.NewValue?.GetType().Name}");
-                
-                // [Fix] Force binding update for SwitchCaseItem
-                if (e.NewValue is SwitchCaseItem)
-                {
-                     var binding = System.Windows.Data.BindingOperations.GetBindingExpression(comboBox, ComboBox.SelectedValueProperty);
-                     binding?.UpdateTarget();
+                        }
+                        return null;
+                    }
                 }
             }
-        }
-
-        private void OnComboBoxLoaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is ComboBox comboBox)
-            {
-                DebugLogger.Log($"[View] ComboBox Loaded. Initial SelectedValue: {comboBox.SelectedValue}");
-                
-                // [Fix] Force binding update for SwitchCaseItem to restore selection
-                // because the JumpTargets list might be swapped during view transitions.
-                if (comboBox.DataContext is SwitchCaseItem)
-                {
-                     var binding = System.Windows.Data.BindingOperations.GetBindingExpression(comboBox, ComboBox.SelectedValueProperty);
-                     binding?.UpdateTarget();
-                }
-            }
-        }
-    }
-}
+            

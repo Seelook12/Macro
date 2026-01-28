@@ -366,43 +366,6 @@ namespace Macro.Models
                     {
                         await Task.Delay(interval, token);
                     }
-                    else
-                    {
-                        MacroEngineService.Instance.AddLog($"[Debug] 마지막 시도 실패. 이미지 저장 진입. captureImage is null? {captureImage == null}");
-                        // [Debug] 최종 실패 시 디버그 이미지 저장
-                        if (captureImage != null)
-                        {
-                            try
-                            {
-                                var debugDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs", "DebugImages");
-                                if (!System.IO.Directory.Exists(debugDir)) System.IO.Directory.CreateDirectory(debugDir);
-
-                                string fileName = $"Fail_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString().Substring(0, 4)}.png";
-                                string fullPath = System.IO.Path.Combine(debugDir, fileName);
-
-                                using (var mat = OpenCvSharp.WpfExtensions.BitmapSourceConverter.ToMat(captureImage))
-                                {
-                                    if (currentRoi.HasValue)
-                                    {
-                                        var r = currentRoi.Value;
-                                        // ROI가 이미지 범위를 벗어나지 않도록 클램핑 필요할 수 있음
-                                        var rect = new OpenCvSharp.Rect((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
-                                        OpenCvSharp.Cv2.Rectangle(mat, rect, OpenCvSharp.Scalar.Red, 3);
-                                    }
-                                    
-                                    OpenCvSharp.Cv2.PutText(mat, $"Fail: {System.IO.Path.GetFileName(ImagePath)}", new OpenCvSharp.Point(10, 30), 
-                                        OpenCvSharp.HersheyFonts.HersheySimplex, 0.8, OpenCvSharp.Scalar.Red, 2);
-
-                                    mat.SaveImage(fullPath);
-                                    MacroEngineService.Instance.AddLog($"[Debug] 실패 화면 저장됨: {fileName}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                MacroEngineService.Instance.AddLog($"[Debug] 이미지 저장 실패: {ex.Message}");
-                            }
-                        }
-                    }
                 }
 
                 // 모든 시도 실패

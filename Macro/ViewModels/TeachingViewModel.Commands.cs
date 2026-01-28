@@ -62,6 +62,10 @@ namespace Macro.ViewModels
         public ReactiveCommand<Unit, Unit> AddCoordinateVariableCommand { get; private set; } = null!;
         public ReactiveCommand<CoordinateVariable, Unit> RemoveCoordinateVariableCommand { get; private set; } = null!;
 
+        // Group Integer Variable Commands
+        public ReactiveCommand<Unit, Unit> AddIntVariableCommand { get; private set; } = null!;
+        public ReactiveCommand<GroupIntVariable, Unit> RemoveIntVariableCommand { get; private set; } = null!;
+
         public ReactiveCommand<MultiAction, Unit> AddSubActionCommand { get; private set; } = null!;
         public ReactiveCommand<IMacroAction, Unit> RemoveSubActionCommand { get; private set; } = null!;
 
@@ -99,15 +103,33 @@ namespace Macro.ViewModels
 
             AddSwitchCaseCommand = ReactiveCommand.Create<SwitchCaseCondition>(cond => 
             {
-                cond?.Cases.Add(new SwitchCaseItem { CaseValue = 0, JumpId = "" });
+                if (cond == null) return;
+                cond.Cases.Add(new SwitchCaseItem { CaseValue = 0, JumpId = "" });
+                
+                // [Fix] If this is Group PostCondition, sync the proxy list
+                if (SelectedGroup?.PostCondition == cond) SyncGroupPostConditionCases();
+                
+                // [Fix] If this is Step Pre/Post Condition, sync the proxy list
+                if (SelectedSequence?.PreCondition == cond || SelectedSequence?.PostCondition == cond) SyncStepSwitchCases();
             });
 
             RemoveSwitchCaseCommand = ReactiveCommand.Create<SwitchCaseItem>(item => 
             {
                 if (SelectedSequence?.PreCondition is SwitchCaseCondition pre && pre.Cases.Contains(item))
+                {
                     pre.Cases.Remove(item);
+                    SyncStepSwitchCases();
+                }
                 else if (SelectedSequence?.PostCondition is SwitchCaseCondition post && post.Cases.Contains(item))
+                {
                     post.Cases.Remove(item);
+                    SyncStepSwitchCases();
+                }
+                else if (SelectedGroup?.PostCondition is SwitchCaseCondition groupPost && groupPost.Cases.Contains(item))
+                {
+                    groupPost.Cases.Remove(item);
+                    SyncGroupPostConditionCases();
+                }
             });
 
             OpenVariableManagerCommand = ReactiveCommand.Create(() => { IsVariableManagerOpen = true; });
@@ -134,6 +156,7 @@ namespace Macro.ViewModels
                         Y = 0, 
                         Description = "New Coordinate" 
                     });
+                    UpdateAvailableCoordinateVariables();
                 }
             }, this.WhenAnyValue(x => x.SelectedGroup).Select(g => g != null));
 
@@ -142,6 +165,32 @@ namespace Macro.ViewModels
                 if (SelectedGroup != null && SelectedGroup.Variables.Contains(v))
                 {
                     SelectedGroup.Variables.Remove(v);
+                    UpdateAvailableCoordinateVariables();
+                }
+            });
+
+            AddIntVariableCommand = ReactiveCommand.Create(() => 
+            {
+                if (SelectedGroup != null)
+                {
+                    if (SelectedGroup.IntVariables == null) SelectedGroup.IntVariables = new System.Collections.ObjectModel.ObservableCollection<GroupIntVariable>();
+                    
+                    SelectedGroup.IntVariables.Add(new GroupIntVariable 
+                    { 
+                        Name = $"IntVar_{SelectedGroup.IntVariables.Count + 1}", 
+                        Value = 0, 
+                        Description = "New Integer Variable" 
+                    });
+                    UpdateAvailableIntVariables();
+                }
+            }, this.WhenAnyValue(x => x.SelectedGroup).Select(g => g != null));
+
+            RemoveIntVariableCommand = ReactiveCommand.Create<GroupIntVariable>(v => 
+            {
+                if (SelectedGroup != null && SelectedGroup.IntVariables != null && SelectedGroup.IntVariables.Contains(v))
+                {
+                    SelectedGroup.IntVariables.Remove(v);
+                    UpdateAvailableIntVariables();
                 }
             });
 

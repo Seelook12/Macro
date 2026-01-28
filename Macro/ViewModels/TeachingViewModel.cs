@@ -146,6 +146,35 @@ namespace Macro.ViewModels
             }
         }
 
+        private string _selectedGroupPostConditionFailJumpId = string.Empty;
+        public string SelectedGroupPostConditionFailJumpId
+        {
+            get => _selectedGroupPostConditionFailJumpId;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedGroupPostConditionFailJumpId, value);
+                if (!_isUpdatingGroupTargets && SelectedGroup?.PostCondition != null)
+                {
+                    SelectedGroup.PostCondition.FailJumpId = value;
+                }
+            }
+        }
+
+        private string _selectedGroupPostConditionVariableName = string.Empty;
+        public string SelectedGroupPostConditionVariableName
+        {
+            get => _selectedGroupPostConditionVariableName;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedGroupPostConditionVariableName, value);
+                if (!_isUpdatingGroupTargets && SelectedGroup?.PostCondition != null)
+                {
+                    if (SelectedGroup.PostCondition is VariableCompareCondition vcc) vcc.VariableName = value;
+                    else if (SelectedGroup.PostCondition is SwitchCaseCondition scc) scc.TargetVariableName = value;
+                }
+            }
+        }
+
         public string SelectedStepSuccessJumpId
         {
             get => _selectedStepSuccessJumpId;
@@ -215,11 +244,16 @@ namespace Macro.ViewModels
                 if (_selectedGroup != value)
                 {
                     DebugLogger.Log($"[VM] SelectedGroup Changing: {(value?.Name ?? "null")} (ID: {value?.Id})");
+                    
+                    var oldGroup = _selectedGroup;
                     _selectedGroup = value;
                     
-                    UpdateGroupProxyProperties();
+                    // [Revert] Back to synchronous update.
+                    // Pass oldGroup to preserve its JumpIds in the target list (preventing binding nullification)
+                    UpdateGroupJumpTargets(oldGroup);
                     UpdateAvailableCoordinateVariables();
                     UpdateAvailableIntVariables();
+                    UpdateGroupProxyProperties();
                     
                     this.RaisePropertyChanged(nameof(SelectedGroup));
                     this.RaisePropertyChanged(nameof(SelectedGroupPostConditionType));
@@ -293,6 +327,29 @@ namespace Macro.ViewModels
             set => this.RaiseAndSetIfChanged(ref _testResultImage, value);
         }
 
+        // Safe Binding for Group PostCondition SwitchCases
+        private ObservableCollection<SwitchCaseItemViewModel> _groupPostConditionCases = new ObservableCollection<SwitchCaseItemViewModel>();
+        public ObservableCollection<SwitchCaseItemViewModel> GroupPostConditionCases
+        {
+            get => _groupPostConditionCases;
+            set => this.RaiseAndSetIfChanged(ref _groupPostConditionCases, value);
+        }
+
+        // Safe Binding for Step SwitchCases (Pre/Post Condition)
+        private ObservableCollection<SwitchCaseItemViewModel> _stepPreSwitchCases = new ObservableCollection<SwitchCaseItemViewModel>();
+        public ObservableCollection<SwitchCaseItemViewModel> StepPreSwitchCases
+        {
+            get => _stepPreSwitchCases;
+            set => this.RaiseAndSetIfChanged(ref _stepPreSwitchCases, value);
+        }
+
+        private ObservableCollection<SwitchCaseItemViewModel> _stepPostSwitchCases = new ObservableCollection<SwitchCaseItemViewModel>();
+        public ObservableCollection<SwitchCaseItemViewModel> StepPostSwitchCases
+        {
+            get => _stepPostSwitchCases;
+            set => this.RaiseAndSetIfChanged(ref _stepPostSwitchCases, value);
+        }
+
         #endregion
 
         #region Constructor
@@ -305,9 +362,6 @@ namespace Macro.ViewModels
             DefinedVariables.CollectionChanged += (s, e) => UpdateAvailableIntVariables();
             
             UpdateJumpTargets();
-
-            this.WhenAnyValue(x => x.SelectedGroup)
-                .Subscribe(_ => UpdateGroupJumpTargets());
 
             InitializeCommands();
 
@@ -330,5 +384,46 @@ namespace Macro.ViewModels
         public string Id { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public bool IsGroup { get; set; }
+    }
+
+    public class SwitchCaseItemViewModel : ReactiveObject
+    {
+        private readonly SwitchCaseItem _model;
+        private readonly Func<bool> _isUpdatingFlag;
+
+        public SwitchCaseItemViewModel(SwitchCaseItem model, Func<bool> isUpdatingFlag)
+        {
+            _model = model;
+            _isUpdatingFlag = isUpdatingFlag;
+        }
+
+        public int CaseValue
+        {
+            get => _model.CaseValue;
+            set
+            {
+                if (_model.CaseValue != value)
+                {
+                    _model.CaseValue = value;
+                    this.RaisePropertyChanged(nameof(CaseValue));
+                }
+            }
+        }
+
+        public string JumpId
+        {
+            get => _model.JumpId;
+            set
+            {
+                // [Protection] WPF ComboBox null-push protection
+                if (!_isUpdatingFlag() && _model.JumpId != value)
+                {
+                    _model.JumpId = value ?? string.Empty;
+                    this.RaisePropertyChanged(nameof(JumpId));
+                }
+            }
+        }
+
+        public SwitchCaseItem Model => _model;
     }
 }

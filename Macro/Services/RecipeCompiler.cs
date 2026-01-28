@@ -56,11 +56,12 @@ namespace Macro.Services
             {
                 hierarchy.Push(current);
                 // 상위 부모 찾기
-                current = FindParentGroupRecursive(rootGroups, current); 
-                // 주의: FindParentGroupRecursive는 항상 루트부터 검색하므로 비효율적일 수 있으나,
-                // 트리 깊이가 얕으므로(보통 5단계 미만) 허용 범위.
-                // 만약 current가 방금 찾은 parent와 같다면(Root) 루프 종료.
-                if (hierarchy.Contains(current)) break; 
+                var nextParent = FindParentGroupRecursive(rootGroups, current); 
+                
+                // 루프 방지 및 종료 조건
+                if (nextParent == null || hierarchy.Contains(nextParent)) break;
+                
+                current = nextParent;
             }
 
             // 2. 컨텍스트 및 변수 상속 (Root -> Leaf 순서 적용)

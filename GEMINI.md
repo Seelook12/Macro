@@ -35,6 +35,15 @@
   11. **2026-01-24 : 그룹 종료 조건**: 그룹 설정의 `PostCondition`은 그룹의 마지막 스텝(`End`) 실행 직후 체크되며, `Switch Case` 등을 통해 유연한 그룹 간 점프를 지원함.
   12. **2026-01-25 : 프로세스 확인 조건 고도화**: `ProcessRunningCondition`은 프로세스 이름 또는 윈도우 타이틀을 기준으로 실행 여부를 감지하며, 자체적인 재시도(`MaxSearchCount`) 로직을 포함함.
   13. **2026-01-25 : 그룹 이동 로직**: 그룹을 위/아래로 이동할 때는 반드시 `FindParentGroup`을 통해 부모가 중첩 그룹인지 확인한 후, 부모의 `Nodes` 또는 최상위 `Groups` 중 적절한 컬렉션에서 `Move`를 수행해야 함.
+  14. **2026-01-25 : RecipeCompiler 아키텍처 (중요)**
+     - **역할**: 계층적인 그룹 트리를 엔진이 실행 가능한 평탄화된 시퀀스로 변환하는 전용 서비스.
+     - **규칙 1 (Centralization)**: 모든 실행 준비 로직(평탄화, 좌표 변환, 변수 주입)은 반드시 `RecipeCompiler`를 통해야 함. 뷰모델에서 자체적으로 변환 로직을 구현하지 말 것.
+     - **규칙 2 (Consistency)**: 전체 실행(`Compile`)과 단일 스텝 테스트(`CompileSingleStep`)는 동일한 컴파일러 로직을 공유하여 실행 결과의 일관성을 보장해야 함.
+     - `CoordinateMode`, `TargetProcessName` 등의 컨텍스트는 부모 그룹에서 자식으로 명시적으로 상속되며, 변수 스코프는 계층 구조를 따라 병합(Override)됨.
+  15. **2026-01-28 : UI 컴포넌트 표준화 규칙**
+     - **점프 대상 선택**: `ComboBox`를 직접 사용하지 말고 반드시 `JumpTargetSelector`를 사용할 것. (목록 갱신 시 데이터 유실 방지 로직 내장)
+     - **변수 및 프로세스 입력**: `IsEditable`이 필요한 경우 `VariableSelector`를 사용할 것. (입력 즉시 반영 및 텍스트 유실 방지 로직 내장)
+     - **Proxy 바인딩 패턴**: 트리뷰 노드 전환 시 데이터 유실을 막기 위해, `SwitchCaseItem` 등 컬렉션 내부 아이템은 반드시 ViewModel 래퍼(Proxy)를 거쳐 바인딩할 것.
 --- 
 - `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
 - `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

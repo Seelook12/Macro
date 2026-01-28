@@ -63,15 +63,22 @@ namespace Macro.ViewModels
             // F6: Stop (VK_F6 = 0x75)
             hotkey.RegisterHotkey(9002, 0, 0x75);
 
+            // F7: Pause (VK_F7 = 0x76)
+            hotkey.RegisterHotkey(9003, 0, 0x76);
+
             hotkey.HotkeyPressed += id =>
             {
-                if (id == 9001) // F5
+                if (id == 9001) // F5 (Start / Resume)
                 {
                     DashboardVM.RunCommand.Execute().Subscribe();
                 }
-                else if (id == 9002) // F6
+                else if (id == 9002) // F6 (Stop)
                 {
                     DashboardVM.StopCommand.Execute().Subscribe();
+                }
+                else if (id == 9003) // F7 (Pause)
+                {
+                    DashboardVM.PauseCommand.Execute().Subscribe();
                 }
             };
         }

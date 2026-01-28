@@ -26,6 +26,7 @@ namespace Macro.ViewModels
 
         // Commands
         public ReactiveCommand<Unit, Unit> RunCommand { get; }
+        public ReactiveCommand<Unit, Unit> PauseCommand { get; }
         public ReactiveCommand<Unit, Unit> StopCommand { get; }
 
         // Properties
@@ -33,6 +34,9 @@ namespace Macro.ViewModels
 
         private readonly ObservableAsPropertyHelper<bool> _isRunning;
         public bool IsRunning => _isRunning.Value;
+
+        private readonly ObservableAsPropertyHelper<bool> _isPaused;
+        public bool IsPaused => _isPaused.Value;
 
         private readonly ObservableAsPropertyHelper<string> _statusMessage;
         public string StatusMessage => _statusMessage.Value;
@@ -58,10 +62,16 @@ namespace Macro.ViewModels
                 .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.IsRunning);
 
+            // IsPaused 상태 동기화
+            _isPaused = _engineService
+                .WhenAnyValue(x => x.IsPaused)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .ToProperty(this, x => x.IsPaused);
+
             // 상태 메시지 동기화
             _statusMessage = _engineService
-                .WhenAnyValue(x => x.IsRunning)
-                .Select(running => running ? "실행 중..." : "대기")
+                .WhenAnyValue(x => x.IsRunning, x => x.IsPaused)
+                .Select(t => t.Item1 ? (t.Item2 ? "일시정지" : "실행 중...") : "대기")
                 .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.StatusMessage);
 
@@ -80,11 +90,19 @@ namespace Macro.ViewModels
                 .ObserveOn(RxApp.MainThreadScheduler)
                 .ToProperty(this, x => x.TotalStepCount);
 
-            // RunCommand: 실행 중이 아닐 때만 가능
-            var canRun = _engineService.WhenAnyValue(x => x.IsRunning).Select(running => !running);
+            // RunCommand: 실행 중이 아닐 때 OR (실행 중 AND 일시정지 중)일 때 가능
+            var canRun = _engineService.WhenAnyValue(x => x.IsRunning, x => x.IsPaused)
+                .Select(t => !t.Item1 || t.Item2);
             
             RunCommand = ReactiveCommand.CreateFromTask(async () =>
             {
+                // 이미 실행 중이고 일시정지 상태라면 -> Resume
+                if (_engineService.IsRunning && _engineService.IsPaused)
+                {
+                    _engineService.Resume();
+                    return;
+                }
+
                 var currentRecipe = RecipeManager.Instance.CurrentRecipe;
                 
                 // 1. 레시피 선택 여부 확인
@@ -161,6 +179,15 @@ namespace Macro.ViewModels
                 }
 
             }, canRun);
+
+            // PauseCommand: 실행 중이고 일시정지가 아닐 때 가능
+            var canPause = _engineService.WhenAnyValue(x => x.IsRunning, x => x.IsPaused)
+                .Select(t => t.Item1 && !t.Item2);
+
+            PauseCommand = ReactiveCommand.Create(() =>
+            {
+                _engineService.Pause();
+            }, canPause);
 
             // StopCommand: 실행 중일 때만 가능
             var canStop = _engineService.WhenAnyValue(x => x.IsRunning);

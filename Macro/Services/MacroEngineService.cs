@@ -40,6 +40,7 @@ namespace Macro.Services
         public static MacroEngineService Instance => _instance.Value;
 
         private bool _isRunning;
+        private bool _isPaused;
         private CancellationTokenSource? _cts;
 
         private string _currentLogFilePath = string.Empty;
@@ -79,6 +80,12 @@ namespace Macro.Services
         {
             get => _isRunning;
             private set => this.RaiseAndSetIfChanged(ref _isRunning, value);
+        }
+
+        public bool IsPaused
+        {
+            get => _isPaused;
+            private set => this.RaiseAndSetIfChanged(ref _isPaused, value);
         }
 
         public ObservableCollection<string> Logs { get; }
@@ -167,6 +174,14 @@ namespace Macro.Services
                     {
                         if (token.IsCancellationRequested) break;
 
+                        // Paused Check
+                        while (IsPaused)
+                        {
+                            if (token.IsCancellationRequested) break;
+                            await Task.Delay(100, token);
+                        }
+                        if (token.IsCancellationRequested) break;
+
                         var item = sequenceList[currentIndex];
                         int stepIndex = currentIndex + 1;
                         
@@ -188,6 +203,14 @@ namespace Macro.Services
                         
                                                 for (int repeat = 1; repeat <= item.RepeatCount; repeat++)
                                                 {
+                                                    if (token.IsCancellationRequested) break;
+
+                                                    // Paused Check (Inner Loop)
+                                                    while (IsPaused)
+                                                    {
+                                                        if (token.IsCancellationRequested) break;
+                                                        await Task.Delay(100, token);
+                                                    }
                                                     if (token.IsCancellationRequested) break;
                                                     
                                                     if (item.RepeatCount > 1)
@@ -447,6 +470,7 @@ namespace Macro.Services
             finally
             {
                 IsRunning = false;
+                IsPaused = false;
                 CurrentStepName = string.Empty;
                 CurrentStepIndex = 0;
                 TotalStepCount = 0;
@@ -542,6 +566,24 @@ namespace Macro.Services
             {
                 AddLog("중지 요청 확인... (정지 중)");
                 _cts.Cancel();
+            }
+        }
+
+        public void Pause()
+        {
+            if (IsRunning && !IsPaused)
+            {
+                IsPaused = true;
+                AddLog("=== 일시정지 ===");
+            }
+        }
+
+        public void Resume()
+        {
+            if (IsRunning && IsPaused)
+            {
+                IsPaused = false;
+                AddLog("=== 재개 ===");
             }
         }
 

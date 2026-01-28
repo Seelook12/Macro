@@ -147,35 +147,63 @@ namespace Macro.ViewModels
 
         
 
-                        // Atomically swap the collections
-
-                        AvailableGroupEntryTargets = newEntryTargets;
-
-                        AvailableGroupExitTargets = newExitTargets;
+                                                // Atomically swap the collections
 
         
 
-                        DebugLogger.Log($"[Logic] ExitTargets Updated: Count={AvailableGroupExitTargets.Count}");
+                                                AvailableGroupEntryTargets = newEntryTargets;
 
         
 
-                        UpdateGroupProxyProperties();
+                                                AvailableGroupExitTargets = newExitTargets;
 
-                    }
+        
 
-                    finally
+                        
 
-                    {
+        
 
-                        _isUpdatingGroupTargets = false;
+                                                DebugLogger.Log($"[Logic] ExitTargets Updated: Count={AvailableGroupExitTargets.Count}");
 
-                    }
+        
 
-                }
+                                            }
 
+        
 
+                                            finally
 
-        public void UpdateGroupProxyProperties()
+        
+
+                                            {
+
+        
+
+                                                _isUpdatingGroupTargets = false;
+
+        
+
+                                            }
+
+        
+
+                                            
+
+        
+
+                                            UpdateGroupProxyProperties();
+
+        
+
+                                        }
+
+        
+
+                        
+
+        
+
+                                public void UpdateGroupProxyProperties()
 
         {
 
@@ -706,10 +734,33 @@ namespace Macro.ViewModels
                 group = parent;
             }
 
-            AvailableCoordinateVariables.Clear();
-            foreach (var v in variables)
+            // [Smart Update] Check if list is different (Name, X, Y)
+            bool isDifferent = false;
+            if (variables.Count != AvailableCoordinateVariables.Count)
             {
-                AvailableCoordinateVariables.Add(v);
+                isDifferent = true;
+            }
+            else
+            {
+                for (int i = 0; i < variables.Count; i++)
+                {
+                    if (variables[i].Name != AvailableCoordinateVariables[i].Name || // Check Reference/ID might be better but Value checks are safer
+                        variables[i].X != AvailableCoordinateVariables[i].X ||
+                        variables[i].Y != AvailableCoordinateVariables[i].Y)
+                    {
+                        isDifferent = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isDifferent)
+            {
+                AvailableCoordinateVariables.Clear();
+                foreach (var v in variables)
+                {
+                    AvailableCoordinateVariables.Add(v);
+                }
             }
         }
 
@@ -735,7 +786,6 @@ namespace Macro.ViewModels
                 {
                     foreach (var v in group.IntVariables.Reverse())
                     {
-                        // Add to temporary local list (preserving nearest scope first)
                         if (!localVars.Contains(v.Name)) localVars.Insert(0, v.Name);
                     }
                 }
@@ -750,10 +800,14 @@ namespace Macro.ViewModels
                 if (!variables.Contains(v)) variables.Add(v);
             }
 
-            AvailableIntVariables.Clear();
-            foreach (var v in variables)
+            // [Smart Update] Only update if changed to prevent ComboBox reset
+            if (!variables.SequenceEqual(AvailableIntVariables))
             {
-                AvailableIntVariables.Add(v);
+                AvailableIntVariables.Clear();
+                foreach (var v in variables)
+                {
+                    AvailableIntVariables.Add(v);
+                }
             }
         }
 

@@ -75,6 +75,15 @@ namespace Macro.Views.Components
         {
             if (_isInternalChange) return;
 
+            // [Protection]
+            // ItemsSource 변경 시 ComboBox는 자동으로 선택을 해제하여 SelectedValue를 null로 만듭니다.
+            // 하지만 우리 로직상 사용자가 명시적으로 '선택 해제'를 하는 경우는 없습니다.
+            // (항상 목록 중 하나를 선택해야 함)
+            // 따라서 null이 들어오는 경우는 100% 시스템에 의한 초기화이므로,
+            // 이를 ViewModel(SelectedId)에 전파하지 않고 무시하여 데이터를 보호합니다.
+
+            if (Part_ComboBox.SelectedValue == null) return;
+
             _isInternalChange = true;
             try
             {

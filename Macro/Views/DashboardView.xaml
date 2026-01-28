@@ -43,10 +43,28 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Command="{Binding RunCommand}" 
-                            Content="▶ 실행" 
                             Width="100" Height="35" 
                             Margin="0,0,10,0"
-                            Background="#2D8A3E" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+                            Foreground="White" FontWeight="Bold" BorderThickness="0">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Content" Value="▶ 실행"/>
+                                <Setter Property="Background" Value="#2D8A3E"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                        <Setter Property="Content" Value="▶ 재개"/>
+                                        <Setter Property="Background" Value="#E0A800"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Button Command="{Binding PauseCommand}" 
+                            Content="⏸ 일시정지" 
+                            Width="100" Height="35" 
+                            Margin="0,0,10,0"
+                            Background="#D97706" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
                     
                     <Button Command="{Binding StopCommand}" 
                             Content="■ 중지" 

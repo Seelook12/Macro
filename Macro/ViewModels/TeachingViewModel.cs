@@ -286,6 +286,15 @@ namespace Macro.ViewModels
                     // [Fix] Call Synchronously to ensure JumpTargets are ready before View binding updates.
                     // Previous race condition (ComboBox clearing selection) is handled by swapping the collection instance in UpdateJumpTargets.
                     UpdateJumpTargets();
+                    
+                    // [Fix] When switching from Step back to Group (SelectedSequence -> null),
+                    // if the Group is the same, the SelectedGroup setter won't trigger.
+                    // We must force a refresh of Group Proxy Properties here to ensure the UI is consistent.
+                    if (_selectedSequence == null && _selectedGroup != null)
+                    {
+                        UpdateGroupProxyProperties();
+                    }
+
                     DebugLogger.Log($"[VM] SelectedSequence Changed & Targets Updated");
                 }
             }

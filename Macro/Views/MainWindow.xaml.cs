@@ -36,6 +36,7 @@ namespace Macro.Views
             // 등록된 단축키 해제
             Macro.Services.HotkeyService.Instance.UnregisterHotkey(9001);
             Macro.Services.HotkeyService.Instance.UnregisterHotkey(9002);
+            Macro.Services.HotkeyService.Instance.UnregisterHotkey(9003);
 
             base.OnClosed(e);
         }

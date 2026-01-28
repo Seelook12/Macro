@@ -10,9 +10,9 @@
     <ComboBox x:Name="Part_ComboBox"
               IsEditable="True"
               ItemsSource="{Binding ItemsSource, RelativeSource={RelativeSource AncestorType=local:VariableSelector}}"
-              Text="{Binding Text, RelativeSource={RelativeSource AncestorType=local:VariableSelector}, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
               DisplayMemberPath="{Binding DisplayMemberPath, RelativeSource={RelativeSource AncestorType=local:VariableSelector}}"
-              SelectedValuePath="{Binding SelectedValuePath, RelativeSource={RelativeSource AncestorType=local:VariableSelector}}">
+              SelectedValuePath="{Binding SelectedValuePath, RelativeSource={RelativeSource AncestorType=local:VariableSelector}}"
+              TextBoxBase.TextChanged="Part_ComboBox_TextChanged">
         <ComboBox.Style>
             <Style TargetType="ComboBox">
                 <Setter Property="VerticalContentAlignment" Value="Center"/>

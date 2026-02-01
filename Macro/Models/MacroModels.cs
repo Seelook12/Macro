@@ -322,7 +322,7 @@ namespace Macro.Models
                             double rh = _contextHeight;
                             roi = new System.Windows.Rect(rx, ry, rw, rh);
 
-                            MacroEngineService.Instance.AddLog($"[Debug] ROI (Auto-Window): {roi}, Scale: {_scaleX:F2}x{_scaleY:F2}");
+                            MacroEngineService.Instance.AddLog($"[Debug] ROI (Auto-Window): {roi}, Context: {_contextWidth}x{_contextHeight}, Scale: {_scaleX:F2}x{_scaleY:F2}");
                         }
                         else
                         {
@@ -701,9 +701,17 @@ namespace Macro.Models
         }
     }
 
+    public enum ProcessNameSource
+    {
+        Direct,
+        Variable
+    }
+
     public class ProcessRunningCondition : ReactiveObject, IMacroCondition
     {
         private string _processName = string.Empty;
+        private ProcessNameSource _sourceType = ProcessNameSource.Direct;
+        private string _processNameVariable = string.Empty;
         private WindowControlSearchMethod _searchMethod = WindowControlSearchMethod.ProcessName;
         private bool _isCheckRunning = true; // true: Running, false: Not Running
         private string _failJumpName = string.Empty;
@@ -717,6 +725,18 @@ namespace Macro.Models
         {
             get => _processName;
             set => this.RaiseAndSetIfChanged(ref _processName, value);
+        }
+
+        public ProcessNameSource SourceType
+        {
+            get => _sourceType;
+            set => this.RaiseAndSetIfChanged(ref _sourceType, value);
+        }
+
+        public string ProcessNameVariable
+        {
+            get => _processNameVariable;
+            set => this.RaiseAndSetIfChanged(ref _processNameVariable, value);
         }
 
         public WindowControlSearchMethod SearchMethod
@@ -761,7 +781,26 @@ namespace Macro.Models
         {
             return await Task.Run(async () =>
             {
-                if (string.IsNullOrEmpty(ProcessName)) return false;
+                // [Source Resolve]
+                string targetName = string.Empty;
+
+                if (SourceType == ProcessNameSource.Variable)
+                {
+                    if (!string.IsNullOrEmpty(ProcessNameVariable))
+                    {
+                        var vars = MacroEngineService.Instance.Variables;
+                        if (vars.TryGetValue(ProcessNameVariable, out var val))
+                        {
+                            targetName = val;
+                        }
+                    }
+                }
+                else
+                {
+                    targetName = ProcessName;
+                }
+
+                if (string.IsNullOrEmpty(targetName)) return false;
 
                 // 재시도 루프
                 int attempts = Math.Max(1, MaxSearchCount);
@@ -775,7 +814,7 @@ namespace Macro.Models
                     if (SearchMethod == WindowControlSearchMethod.ProcessName)
                     {
                         // .exe 확장자 제거 (GetProcessesByName은 확장자 없이 검색)
-                        string target = ProcessName;
+                        string target = targetName;
                         if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                         {
                             target = target.Substring(0, target.Length - 4);
@@ -786,7 +825,7 @@ namespace Macro.Models
                     }
                     else // WindowTitle
                     {
-                        IntPtr hWnd = InputHelper.FindWindowByTitle(ProcessName);
+                        IntPtr hWnd = InputHelper.FindWindowByTitle(targetName);
                         isRunning = hWnd != IntPtr.Zero;
                     }
 
@@ -1435,6 +1474,9 @@ namespace Macro.Models
         private WindowControlState _contextWindowState = WindowControlState.Maximize;
 
         private string _targetProcessName = string.Empty;
+        private ProcessNameSource _targetNameSource = ProcessNameSource.Direct;
+        private string _targetProcessNameVariable = string.Empty;
+
         private string _processNotFoundJumpName = string.Empty;
         private string _processNotFoundJumpId = string.Empty;
         private int _refWindowWidth = 1920;
@@ -1557,6 +1599,18 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _targetProcessName, value);
         }
 
+        public ProcessNameSource TargetNameSource
+        {
+            get => _targetNameSource;
+            set => this.RaiseAndSetIfChanged(ref _targetNameSource, value);
+        }
+
+        public string TargetProcessNameVariable
+        {
+            get => _targetProcessNameVariable;
+            set => this.RaiseAndSetIfChanged(ref _targetProcessNameVariable, value);
+        }
+
         public string ProcessNotFoundJumpName
         {
             get => _processNotFoundJumpName;
@@ -1670,6 +1724,9 @@ namespace Macro.Models
         private WindowControlSearchMethod _contextSearchMethod = WindowControlSearchMethod.ProcessName;
         private WindowControlState _contextWindowState = WindowControlState.Maximize;
         private string _targetProcessName = string.Empty;
+        private ProcessNameSource _targetNameSource = ProcessNameSource.Direct;
+        private string _targetProcessNameVariable = string.Empty;
+        
         private string _processNotFoundJumpName = string.Empty;
         private string _processNotFoundJumpId = string.Empty;
         private int _refWindowWidth = 1920;
@@ -1764,6 +1821,18 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _targetProcessName, value);
         }
 
+        public ProcessNameSource TargetNameSource
+        {
+            get => _targetNameSource;
+            set => this.RaiseAndSetIfChanged(ref _targetNameSource, value);
+        }
+
+        public string TargetProcessNameVariable
+        {
+            get => _targetProcessNameVariable;
+            set => this.RaiseAndSetIfChanged(ref _targetProcessNameVariable, value);
+        }
+
         public string ProcessNotFoundJumpName
         {
             get => _processNotFoundJumpName;
@@ -1787,6 +1856,13 @@ namespace Macro.Models
             get => _refWindowHeight;
             set => this.RaiseAndSetIfChanged(ref _refWindowHeight, value);
         }
+
+        // [Binding Fix] Dummy properties to prevent binding errors in TreeViewItem Style
+        [JsonIgnore]
+        public bool IsGroupStart => false;
+
+        [JsonIgnore]
+        public bool IsGroupEnd => false;
 
         public SequenceGroup()
         {

@@ -291,6 +291,36 @@
     - **명시적 동기화**: `Add/RemoveSwitchCaseCommand` 실행 시 Proxy 컬렉션(`SyncStepSwitchCases`)을 명시적으로 호출하여 UI가 즉시 갱신되도록 보완.
 - **코드 정제**: `TeachingView.xaml.cs`에 흩어져 있던 임시 보호용 이벤트 핸들러들을 제거하고, XAML 코드를 커스텀 컨트롤 기반으로 단순화하여 유지보수성 향상.
 
+### 3.34. 일시정지(Pause) 기능 구현 (2026-01-28)
+- **Engine Logic**: `IsPaused` 상태와 루프 내부 대기 로직을 추가하여, 실행 중 즉시 멈춤 및 재개 가능하도록 구현.
+- **UI/UX**: 
+    - 대시보드에 **[⏸ 일시정지]** 버튼 추가.
+    - [▶ 실행] 버튼을 일시정지 시 **[▶ 재개]** (황금색) 스타일로 동적 변경.
+    - `RunCommand` 수정: 일시정지 상태에서 실행 시 처음부터가 아닌 멈춘 지점부터 재개하도록 로직 변경.
+- **Hotkey**: **F7** 키를 일시정지/재개 단축키로 추가 등록. (F5: 시작/재개, F6: 중지)
+
+### 3.35. 데이터 무결성 및 바인딩 안정화 (Critical Fixes) (2026-01-28)
+- **현상**: 스텝을 선택했다가 다시 그룹을 선택하거나, 특정 UI 조작 시 변수명 등 설정 데이터가 사라지는 문제 지속.
+- **원인 분석**: 
+    - `VariableSelector` 내부의 `ComboBox`가 `ItemsSource` 갱신(Clear/Add) 시 `Text` 속성을 자동으로 초기화(`""`)하며 바인딩된 모델 데이터를 삭제.
+    - 뷰모델에서 불필요하게 리스트를 `Clear()` 하고 다시 채우는 로직이 콤보박스의 초기화를 유발.
+    - 스텝에서 그룹으로 돌아올 때(`SelectedSequence = null`), 그룹이 변경되지 않았으면 프록시 속성 갱신을 건너뛰는 최적화 오류.
+- **해결 방안**:
+    1.  **Component Protection**: `VariableSelector`와 `JumpTargetSelector`에서 바인딩을 끊고, **시스템에 의한 `null` 또는 빈 값 변경을 감지하여 원본 데이터를 복구**하는 수동 동기화 로직 적용.
+    2.  **Smart List Update**: `AvailableIntVariables` 등 목록 갱신 시 `SequenceEqual`로 변경 사항이 있을 때만 업데이트하도록 수정하여 불필요한 초기화 방지.
+    3.  **Force Refresh**: 스텝 선택 해제 시 그룹 프록시 속성을 강제로 동기화(`UpdateGroupProxyProperties`)하도록 로직 보완.
+- **결과**: UI 이동이나 목록 갱신 시 데이터가 절대 유실되지 않는 강력한 안정성 확보.
+
+### 3.36. 그룹 점프 바인딩 안정화 및 UI 타이밍 이슈 해결 (2026-02-01)
+- **현상**: 동일 레벨(Depth)의 그룹 간 전환 시 '종료 후 이동' 등 점프 대상 콤보박스의 값이 UI에 표시되지 않는 문제 발생.
+- **원인 분석**:
+  1. **Data Detachment**: 그룹 전환 시 이전 그룹의 설정 ID가 새 목록에 포함되지 않아, WPF 바인딩 시스템이 값을 `null`로 강제 초기화.
+  2. **WPF Binding Race Condition**: 커스텀 컨트롤(`JumpTargetSelector`)의 `ItemsSource`가 바뀔 때, 내부 `ComboBox`의 실제 바인딩 갱신보다 선택값 동기화(`SynchronizeSelection`)가 먼저 실행되어 값을 찾지 못함.
+- **해결 방안**:
+  1. **ID Persistence**: `UpdateGroupJumpTargets` 로직을 수정하여 전환 직전 그룹(`oldGroup`)의 점프 ID를 강제로 목록에 포함시켜 바인딩 유실 방지.
+  2. **Deferred Synchronization**: `JumpTargetSelector.xaml.cs`에서 `OnItemsSourceChanged` 시점에 `Dispatcher.InvokeAsync`를 사용하여, 내부 바인딩 갱신이 완료된 후 선택값을 동기화하도록 개선.
+  3. **Binding Error Cleanup**: `SequenceGroup` 모델에 `IsGroupStart/End` 더미 속성을 추가하여 트리뷰 스타일에서 발생하던 `Path Error` 로그 제거.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
 - **주요 해결 사항**: 

@@ -336,6 +336,34 @@ namespace Macro.Services
                                                                 {
                                                                     throw new ComponentFailureException($"PostCondition 실패: {item.Name}", item.PostCondition.FailJumpName, item.PostCondition.FailJumpId);
                                                                 }
+
+                                                                // [Fix] PostCondition SwitchCase 강제 분기 확인
+                                                                var forceJumpId = item.PostCondition.GetForceJumpId();
+                                                                
+                                                                // [Debug] SwitchCase 로그
+                                                                if (item.PostCondition is SwitchCaseCondition sc)
+                                                                {
+                                                                    if (Variables.TryGetValue(sc.TargetVariableName, out var valStr))
+                                                                    {
+                                                                        if (int.TryParse(valStr, out int valInt))
+                                                                        {
+                                                                            AddLog($"    [SwitchCase] Var '{sc.TargetVariableName}'={valInt}. Checking {sc.Cases.Count} cases. JumpId: {(forceJumpId.HasValue ? forceJumpId.ToString() : "None")}");
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            AddLog($"    [SwitchCase] Warning: Var '{sc.TargetVariableName}' value '{valStr}' is not an integer.");
+                                                                        }
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        AddLog($"    [SwitchCase] Warning: Variable '{sc.TargetVariableName}' not found in runtime variables.");
+                                                                    }
+                                                                }
+
+                                                                if (forceJumpId.HasValue)
+                                                                {
+                                                                    throw new ForceJumpException(forceJumpId.Value.ToString());
+                                                                }
                                                             }
                         
                                                             stepSuccess = true;
@@ -641,16 +669,31 @@ namespace Macro.Services
 
         private void ConfigureRelativeCoordinates(SequenceItem item)
         {
-            if (string.IsNullOrEmpty(item.TargetProcessName))
-                throw new Exception("Target Name is empty.");
+            // [Target Source Resolve]
+            string targetName = string.Empty;
+            if (item.TargetNameSource == ProcessNameSource.Variable)
+            {
+                if (!string.IsNullOrEmpty(item.TargetProcessNameVariable) && 
+                    Variables.TryGetValue(item.TargetProcessNameVariable, out var val))
+                {
+                    targetName = val;
+                }
+            }
+            else
+            {
+                targetName = item.TargetProcessName;
+            }
+
+            if (string.IsNullOrEmpty(targetName))
+                throw new Exception("Target Name is empty (or variable not found).");
 
             IntPtr hWnd = IntPtr.Zero;
 
             if (item.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
             {
-                var processes = System.Diagnostics.Process.GetProcessesByName(item.TargetProcessName);
+                var processes = System.Diagnostics.Process.GetProcessesByName(targetName);
                 if (processes.Length == 0)
-                    throw new Exception($"Process '{item.TargetProcessName}' not found.");
+                    throw new Exception($"Process '{targetName}' not found.");
 
                 // Main Window가 있는 첫 번째 프로세스 찾기
                 foreach (var p in processes)
@@ -663,16 +706,16 @@ namespace Macro.Services
                 }
                 
                 if (hWnd == IntPtr.Zero)
-                    throw new Exception($"Process '{item.TargetProcessName}' found but has no main window.");
+                    throw new Exception($"Process '{targetName}' found but has no main window.");
             }
             else // WindowTitle
             {
-                hWnd = InputHelper.FindWindowByTitle(item.TargetProcessName);
+                hWnd = InputHelper.FindWindowByTitle(targetName);
                 if (hWnd == IntPtr.Zero)
-                    throw new Exception($"Window with title containing '{item.TargetProcessName}' not found.");
+                    throw new Exception($"Window with title containing '{targetName}' not found.");
             }
 
-            AddLog($"[Debug] 타겟 윈도우 설정: '{item.TargetProcessName}' (hWnd: {hWnd})");
+            AddLog($"[Debug] 타겟 윈도우 설정: '{targetName}' (hWnd: {hWnd})");
 
             // Apply Window State
             int nCmdShow = InputHelper.SW_RESTORE;
@@ -705,6 +748,7 @@ namespace Macro.Services
 
             if (needStateChange)
             {
+                AddLog($"[Debug] 윈도우 상태 변경 시도: {item.ContextWindowState}");
                 InputHelper.ShowWindow(hWnd, nCmdShow);
                 Thread.Sleep(500); // Wait for animation
             }
@@ -725,11 +769,20 @@ namespace Macro.Services
             double scaleX = 1.0;
             double scaleY = 1.0;
 
-            if (item.RefWindowWidth > 0 && item.RefWindowHeight > 0 && clientRect.Width > 0 && clientRect.Height > 0)
+            if (item.RefWindowWidth > 0 && item.RefWindowHeight > 0)
             {
-                scaleX = (double)clientRect.Width / item.RefWindowWidth;
-                scaleY = (double)clientRect.Height / item.RefWindowHeight;
+                if (clientRect.Width > 0 && clientRect.Height > 0)
+                {
+                    scaleX = (double)clientRect.Width / item.RefWindowWidth;
+                    scaleY = (double)clientRect.Height / item.RefWindowHeight;
+                }
             }
+            else
+            {
+                AddLog($"[Warning] 기준 해상도(RefWindow)가 설정되지 않았습니다 (0x0). 스케일링이 적용되지 않습니다. 그룹 설정을 확인하세요.");
+            }
+
+            AddLog($"[Debug] 좌표 변환: ClientRect={clientRect.Width}x{clientRect.Height}, Ref={item.RefWindowWidth}x{item.RefWindowHeight}, Scale={scaleX:F4}x{scaleY:F4}, Offset={pt.X},{pt.Y}");
 
             // Apply to all components
             if (item.PreCondition is ISupportCoordinateTransform pre) 

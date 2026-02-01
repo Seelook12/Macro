@@ -111,35 +111,91 @@ namespace Macro.ViewModels
 
                 
 
-                                // [BugFix] Also Include IDs from the Previous Group (oldGroup) to prevent binding loss (null) during View transition
+                                                // [BugFix] Also Include IDs from the Previous Group (oldGroup) to prevent binding loss (null) during View transition
 
-                                if (oldGroup != null)
+                
 
-                                {
+                                                if (oldGroup != null)
 
-                                    if (oldGroup.PostCondition is SwitchCaseCondition oldSwitch)
+                
 
-                                    {
+                                                {
 
-                                        foreach (var c in oldSwitch.Cases)
+                
 
-                                        {
+                                                    // [Added] Include Old Group's Next Group JumpId
 
-                                            if (!string.IsNullOrEmpty(c.JumpId)) forceIds.Add(c.JumpId);
+                
 
-                                        }
+                                                    var oldEndStep = oldGroup.Nodes.OfType<SequenceItem>().FirstOrDefault(i => i.IsGroupEnd);
 
-                                    }
+                
 
-                                    if (oldGroup.PostCondition != null && !string.IsNullOrEmpty(oldGroup.PostCondition.FailJumpId))
+                                                    if (oldEndStep != null && !string.IsNullOrEmpty(oldEndStep.SuccessJumpId))
 
-                                    {
+                
 
-                                        forceIds.Add(oldGroup.PostCondition.FailJumpId);
+                                                    {
 
-                                    }
+                
 
-                                }
+                                                        forceIds.Add(oldEndStep.SuccessJumpId);
+
+                
+
+                                                    }
+
+                
+
+                                
+
+                
+
+                                                    if (oldGroup.PostCondition is SwitchCaseCondition oldSwitch)
+
+                
+
+                                                    {
+
+                
+
+                                                        foreach (var c in oldSwitch.Cases)
+
+                
+
+                                                        {
+
+                
+
+                                                            if (!string.IsNullOrEmpty(c.JumpId)) forceIds.Add(c.JumpId);
+
+                
+
+                                                        }
+
+                
+
+                                                    }
+
+                
+
+                                                    if (oldGroup.PostCondition != null && !string.IsNullOrEmpty(oldGroup.PostCondition.FailJumpId))
+
+                
+
+                                                    {
+
+                
+
+                                                        forceIds.Add(oldGroup.PostCondition.FailJumpId);
+
+                
+
+                                                    }
+
+                
+
+                                                }
 
                 
 
@@ -148,22 +204,10 @@ namespace Macro.ViewModels
         
 
                                                 // Atomically swap the collections
-
-        
-
-                                                AvailableGroupEntryTargets = newEntryTargets;
-
-        
-
-                                                AvailableGroupExitTargets = newExitTargets;
-
-        
-
+                                AvailableGroupEntryTargets = newEntryTargets;
+                                AvailableGroupExitTargets = newExitTargets;
                         
-
-        
-
-                                                DebugLogger.Log($"[Logic] ExitTargets Updated: Count={AvailableGroupExitTargets.Count}");
+                                DebugLogger.Log($"[Logic] ExitTargets Updated: Count={AvailableGroupExitTargets.Count}");
 
         
 

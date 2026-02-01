@@ -32,7 +32,7 @@ namespace Macro.ViewModels
 
         public ReactiveCommand<ImageMatchCondition, Unit> SelectImageCommand { get; private set; } = null!;
         public ReactiveCommand<ImageMatchCondition, Unit> CaptureImageCommand { get; private set; } = null!;
-        public ReactiveCommand<ImageMatchCondition, Unit> UpdateRefSizeCommand { get; private set; } = null!;
+        public ReactiveCommand<object, Unit> UpdateRefSizeCommand { get; private set; } = null!;
         public ReactiveCommand<ImageMatchCondition, Unit> TestImageConditionCommand { get; private set; } = null!;
         public ReactiveCommand<object, Unit> PickRegionCommand { get; private set; } = null!;
         public ReactiveCommand<WindowControlAction, Unit> RefreshTargetListCommand { get; private set; } = null!;
@@ -266,11 +266,10 @@ namespace Macro.ViewModels
                 }
             });
 
-            SelectImageCommand = ReactiveCommand.Create<ImageMatchCondition>(SelectImage);
+            SelectImageCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(SelectImageAsync);
             CaptureImageCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(CaptureImageAsync);
-            UpdateRefSizeCommand = ReactiveCommand.Create<ImageMatchCondition>(UpdateCurrentGroupReferenceSize);
+            UpdateRefSizeCommand = ReactiveCommand.Create<object>(UpdateCurrentGroupReferenceSize);
             TestImageConditionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(TestImageConditionAsync);
-            PickRegionCommand = ReactiveCommand.Create<object>(PickRegion);
         }
 
         #region Command Handlers
@@ -580,21 +579,28 @@ namespace Macro.ViewModels
             }
         }
 
-        private void SelectImage(ImageMatchCondition condition)
+        private async Task SelectImageAsync(ImageMatchCondition condition)
         {
             if (condition == null) return;
 
-            var dlg = new Microsoft.Win32.OpenFileDialog
+            await Task.Run(() => 
             {
-                Filter = "Image Files|*.png;*.jpg;*.bmp",
-                Title = "Select Template Image"
-            };
+                // OpenFileDialog must run on STA thread (UI thread)
+                RxApp.MainThreadScheduler.Schedule(() =>
+                {
+                    var dlg = new Microsoft.Win32.OpenFileDialog
+                    {
+                        Filter = "Image Files|*.png;*.jpg;*.bmp",
+                        Title = "Select Template Image"
+                    };
 
-            if (dlg.ShowDialog() == true)
-            {
-                SaveImageToRecipe(condition, dlg.FileName);
-                UpdateCurrentGroupReferenceSize(condition);
-            }
+                    if (dlg.ShowDialog() == true)
+                    {
+                        SaveImageToRecipe(condition, dlg.FileName);
+                        UpdateCurrentGroupReferenceSize(condition);
+                    }
+                });
+            });
         }
 
         private async Task CaptureImageAsync(ImageMatchCondition condition)
@@ -611,25 +617,32 @@ namespace Macro.ViewModels
             }
         }
 
-        private void UpdateCurrentGroupReferenceSize(IMacroCondition targetCondition)
+        private void UpdateCurrentGroupReferenceSize(object? param)
         {
             SequenceGroup? groupToUpdate = null;
 
-            if (SelectedSequence != null)
+            if (param is SequenceGroup g)
             {
-                if (SelectedSequence.PreCondition == targetCondition || 
-                    SelectedSequence.PostCondition == targetCondition)
+                groupToUpdate = g;
+            }
+            else if (param is IMacroCondition targetCondition)
+            {
+                if (SelectedSequence != null)
                 {
-                    groupToUpdate = GetEffectiveGroupContext(SelectedSequence);
+                    if (SelectedSequence.PreCondition == targetCondition || 
+                        SelectedSequence.PostCondition == targetCondition)
+                    {
+                        groupToUpdate = GetEffectiveGroupContext(SelectedSequence);
+                    }
+                }
+                
+                if (groupToUpdate == null && SelectedGroup != null)
+                {
+                    groupToUpdate = ResolveGroupContext(SelectedGroup);
                 }
             }
-            
-            if (groupToUpdate == null && SelectedGroup != null)
-            {
-                groupToUpdate = ResolveGroupContext(SelectedGroup);
-            }
 
-            if (groupToUpdate != null && groupToUpdate.CoordinateMode == CoordinateMode.WindowRelative)
+            if (groupToUpdate != null)
             {
                  var winInfo = GetTargetWindowInfo(groupToUpdate);
                  if (winInfo.HasValue)

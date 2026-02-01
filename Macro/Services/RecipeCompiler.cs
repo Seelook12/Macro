@@ -96,6 +96,8 @@ namespace Macro.Services
                     effectiveContext.CoordinateMode = group.CoordinateMode;
                     effectiveContext.ContextSearchMethod = group.ContextSearchMethod;
                     effectiveContext.TargetProcessName = group.TargetProcessName;
+                    effectiveContext.TargetNameSource = group.TargetNameSource;
+                    effectiveContext.TargetProcessNameVariable = group.TargetProcessNameVariable;
                     effectiveContext.ContextWindowState = group.ContextWindowState;
                     effectiveContext.ProcessNotFoundJumpName = group.ProcessNotFoundJumpName;
                     effectiveContext.ProcessNotFoundJumpId = group.ProcessNotFoundJumpId;
@@ -116,6 +118,8 @@ namespace Macro.Services
                 item.CoordinateMode = effectiveContext.CoordinateMode;
                 item.ContextSearchMethod = effectiveContext.ContextSearchMethod;
                 item.TargetProcessName = effectiveContext.TargetProcessName;
+                item.TargetNameSource = effectiveContext.TargetNameSource;
+                item.TargetProcessNameVariable = effectiveContext.TargetProcessNameVariable;
                 item.ContextWindowState = effectiveContext.ContextWindowState;
                 item.ProcessNotFoundJumpName = effectiveContext.ProcessNotFoundJumpName;
                 item.ProcessNotFoundJumpId = effectiveContext.ProcessNotFoundJumpId;
@@ -189,6 +193,8 @@ namespace Macro.Services
                     group.CoordinateMode = parentGroupContext.CoordinateMode;
                     group.ContextSearchMethod = parentGroupContext.ContextSearchMethod;
                     group.TargetProcessName = parentGroupContext.TargetProcessName;
+                    group.TargetNameSource = parentGroupContext.TargetNameSource;
+                    group.TargetProcessNameVariable = parentGroupContext.TargetProcessNameVariable;
                     group.ContextWindowState = parentGroupContext.ContextWindowState;
                     group.ProcessNotFoundJumpName = parentGroupContext.ProcessNotFoundJumpName;
                     group.ProcessNotFoundJumpId = parentGroupContext.ProcessNotFoundJumpId;
@@ -250,6 +256,8 @@ namespace Macro.Services
             item.CoordinateMode = context.CoordinateMode;
             item.ContextSearchMethod = context.ContextSearchMethod;
             item.TargetProcessName = context.TargetProcessName;
+            item.TargetNameSource = context.TargetNameSource;
+            item.TargetProcessNameVariable = context.TargetProcessNameVariable;
             item.ContextWindowState = context.ContextWindowState;
             item.ProcessNotFoundJumpName = context.ProcessNotFoundJumpName;
             item.ProcessNotFoundJumpId = context.ProcessNotFoundJumpId;

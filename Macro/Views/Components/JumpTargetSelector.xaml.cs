@@ -54,7 +54,8 @@ namespace Macro.Views.Components
                 newCollection.CollectionChanged += control.OnCollectionChanged;
             }
 
-            control.SynchronizeSelection();
+            // [Fix] Defer synchronization to ensure ComboBox.ItemsSource binding is updated
+            control.Dispatcher.InvokeAsync(() => control.SynchronizeSelection());
         }
 
         private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

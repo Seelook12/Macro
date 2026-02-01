@@ -343,7 +343,34 @@
         <!-- 6. ProcessRunningCondition (Direct) -->
         <DataTemplate DataType="{x:Type models:ProcessRunningCondition}">
             <StackPanel Margin="5">
+                <!-- Input Source Selection -->
+                <TextBlock Text="입력 소스 (Input Source):" Margin="0,0,0,5" Foreground="Gray"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <RadioButton Content="직접 입력 (Direct)" GroupName="ProcRunSrc" Margin="0,0,15,0"
+                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Direct}"/>
+                    <RadioButton Content="변수값 (Variable)" GroupName="ProcRunSrc"
+                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+                                 ToolTip="변수에 저장된 문자열을 대상 이름으로 사용합니다."/>
+                </StackPanel>
+
                 <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70"/>
+                    <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding SearchMethod}"/>
+                </DockPanel>
+
+                <!-- Direct Mode Input -->
+                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                    <DockPanel.Style>
+                        <Style TargetType="DockPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SourceType}" Value="Direct">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DockPanel.Style>
                     <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="70"/>
                     <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
                             Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -354,14 +381,23 @@
                                                 ToolTip="Process Name or Window Title Part"/>
                 </DockPanel>
 
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
-                    <RadioButton Content="프로세스 이름" GroupName="ProcRun" 
-                                 IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=ProcessName}" 
-                                 Margin="0,0,15,0"/>
-                    <RadioButton Content="윈도우 타이틀" GroupName="ProcRun"
-                                 IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=WindowTitle}"/>
-                </StackPanel>
+                <!-- Variable Mode Input -->
+                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                    <DockPanel.Style>
+                        <Style TargetType="DockPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SourceType}" Value="Variable">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DockPanel.Style>
+                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                    <components:VariableSelector ItemsSource="{Binding DataContext.AvailableIntVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Text="{Binding ProcessNameVariable, Mode=TwoWay}"
+                                                ToolTip="대상 이름을 담고 있는 변수를 선택하세요."/>
+                </DockPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                     <TextBlock Text="조건 확인:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
@@ -1034,25 +1070,61 @@
                                                                 <!-- Process Running -->
                                                                 <DataTemplate DataType="{x:Type models:ProcessRunningCondition}">
                                                                     <StackPanel Margin="5">
+                                                                        <!-- Input Source Selection -->
+                                                                        <TextBlock Text="입력 소스 (Input Source):" Margin="0,0,0,5" Foreground="Gray"/>
+                                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                                            <RadioButton Content="직접 입력 (Direct)" GroupName="GrpProcRunSrc" Margin="0,0,15,0"
+                                                                                         IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Direct}"/>
+                                                                            <RadioButton Content="변수값 (Variable)" GroupName="GrpProcRunSrc"
+                                                                                         IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+                                                                                         ToolTip="변수에 저장된 문자열을 대상 이름으로 사용합니다."/>
+                                                                        </StackPanel>
+
                                                                         <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                                                                            <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70"/>
+                                                                            <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                                      SelectedItem="{Binding SearchMethod}"/>
+                                                                        </DockPanel>
+
+                                                                        <!-- Direct Mode Input -->
+                                                                        <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                                                                            <DockPanel.Style>
+                                                                                <Style TargetType="DockPanel">
+                                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding SourceType}" Value="Direct">
+                                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </DockPanel.Style>
                                                                             <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="70"/>
                                                                             <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
                                                                                     Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                                     CommandParameter="{Binding .}"
                                                                                     ToolTip="Refresh Process List"/>
-                                                                            <ComboBox IsEditable="True" 
-                                                                                      ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                                      Text="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}"/>
+                                                                            <components:VariableSelector ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                                                        Text="{Binding ProcessName, Mode=TwoWay}"
+                                                                                                        ToolTip="Process Name or Window Title Part"/>
                                                                         </DockPanel>
 
-                                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                                            <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
-                                                                            <RadioButton Content="프로세스 이름" GroupName="GrpProcSearch" 
-                                                                                         IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=ProcessName}" 
-                                                                                         Margin="0,0,15,0"/>
-                                                                            <RadioButton Content="윈도우 타이틀" GroupName="GrpProcSearch"
-                                                                                         IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=WindowTitle}"/>
-                                                                        </StackPanel>
+                                                                        <!-- Variable Mode Input -->
+                                                                        <DockPanel LastChildFill="True" Margin="0,0,0,10">
+                                                                            <DockPanel.Style>
+                                                                                <Style TargetType="DockPanel">
+                                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding SourceType}" Value="Variable">
+                                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </DockPanel.Style>
+                                                                            <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+                                                                            <components:VariableSelector ItemsSource="{Binding DataContext.AvailableIntVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                                                        Text="{Binding ProcessNameVariable, Mode=TwoWay}"
+                                                                                                        ToolTip="대상 이름을 담고 있는 변수를 선택하세요."/>
+                                                                        </DockPanel>
 
                                                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                                             <TextBlock Text="조건 확인:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
@@ -1175,13 +1247,34 @@
                                         </Style>
                                     </StackPanel.Style>
                                     
+                                    <!-- Input Source Selection -->
+                                    <TextBlock Text="입력 소스 (Input Source):" Margin="0,0,0,5" Foreground="Gray"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <RadioButton Content="직접 입력 (Direct)" GroupName="GrpTargetSrc" Margin="0,0,15,0"
+                                                     IsChecked="{Binding TargetNameSource, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Direct}"/>
+                                        <RadioButton Content="변수값 (Variable)" GroupName="GrpTargetSrc"
+                                                     IsChecked="{Binding TargetNameSource, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+                                                     ToolTip="변수에 저장된 문자열을 대상 이름으로 사용합니다."/>
+                                    </StackPanel>
+
                                     <DockPanel LastChildFill="True" Margin="0,0,0,5">
                                         <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="100"/>
                                         <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   SelectedItem="{Binding ContextSearchMethod}"/>
                                     </DockPanel>
 
+                                    <!-- Direct Mode Target Name -->
                                     <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                        <DockPanel.Style>
+                                            <Style TargetType="DockPanel">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding TargetNameSource}" Value="Direct">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DockPanel.Style>
                                         <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="100"/>
                                         <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
                                                 Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -1191,6 +1284,24 @@
                                                   ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   Text="{Binding TargetProcessName, UpdateSourceTrigger=PropertyChanged}"
                                                   ToolTip="Process Name or Window Title"/>
+                                    </DockPanel>
+
+                                    <!-- Variable Mode Target Name -->
+                                    <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                        <DockPanel.Style>
+                                            <Style TargetType="DockPanel">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding TargetNameSource}" Value="Variable">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DockPanel.Style>
+                                        <TextBlock Text="변수명:" VerticalAlignment="Center" Width="100"/>
+                                        <components:VariableSelector ItemsSource="{Binding DataContext.AvailableIntVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    Text="{Binding TargetProcessNameVariable, Mode=TwoWay}"
+                                                                    ToolTip="대상 이름을 담고 있는 변수를 선택하세요."/>
                                     </DockPanel>
 
                                     <DockPanel LastChildFill="True" Margin="0,0,0,5">
@@ -1215,6 +1326,35 @@
                                             <TextBox Text="{Binding RefWindowHeight, UpdateSourceTrigger=PropertyChanged}"/>
                                         </DockPanel>
                                     </UniformGrid>
+
+                                    <Button Content="현재 대상 창 크기로 기준 해상도 설정" 
+                                            Command="{Binding DataContext.UpdateRefSizeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding .}"
+                                            Margin="0,5,0,5" Padding="5" Background="#E0F7FA" FontWeight="Bold"/>
+
+                                    <!-- Warning for Zero Reference Size -->
+                                    <TextBlock Text="⚠️ 기준 해상도가 0입니다. 스케일링이 작동하지 않습니다." 
+                                               Foreground="Red" FontWeight="Bold" Margin="0,5,0,0" TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding RefWindowWidth}" Value="0"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </MultiDataTrigger>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding RefWindowHeight}" Value="0"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
@@ -1508,30 +1648,121 @@
                                             </StackPanel>
                                         </DataTemplate>
 
-                                        <!-- Proxy Binding for ProcessRunningCondition (Pre) -->
-                                        <DataTemplate DataType="{x:Type models:ProcessRunningCondition}">
-                                            <StackPanel Margin="5">
-                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
-                                                    <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="70"/>
-                                                    <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
-                                                            Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            CommandParameter="{Binding .}"
-                                                            ToolTip="Refresh Process List"/>
-                                                    <components:VariableSelector ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                                Text="{Binding ProcessName, Mode=TwoWay}"
-                                                                                ToolTip="Process Name or Window Title Part"/>
-                                                </DockPanel>
+                                                                                                                        <!-- Proxy Binding for ProcessRunningCondition (Pre) -->
 
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
-                                                    <RadioButton Content="프로세스 이름" GroupName="ProcRunPreSearch" 
-                                                                 IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=ProcessName}" 
-                                                                 Margin="0,0,15,0"/>
-                                                    <RadioButton Content="윈도우 타이틀" GroupName="ProcRunPreSearch"
-                                                                 IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=WindowTitle}"/>
-                                                </StackPanel>
+                                                                                                                        <DataTemplate DataType="{x:Type models:ProcessRunningCondition}">
 
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                                                                                            <StackPanel Margin="5">
+
+                                                                                                                                <!-- Input Source Selection -->
+
+                                                                                                                                <TextBlock Text="입력 소스 (Input Source):" Margin="0,0,0,5" Foreground="Gray"/>
+
+                                                                                                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+
+                                                                                                                                    <RadioButton Content="직접 입력 (Direct)" GroupName="ProcRunPreSrc" Margin="0,0,15,0"
+
+                                                                                                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Direct}"/>
+
+                                                                                                                                    <RadioButton Content="변수값 (Variable)" GroupName="ProcRunPreSrc"
+
+                                                                                                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+
+                                                                                                                                                 ToolTip="변수에 저장된 문자열을 대상 이름으로 사용합니다."/>
+
+                                                                                                                                </StackPanel>
+
+                                                                                
+
+                                                                                                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+
+                                                                                                                                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70"/>
+
+                                                                                                                                    <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                              SelectedItem="{Binding SearchMethod}"/>
+
+                                                                                                                                </DockPanel>
+
+                                                                                
+
+                                                                                                                                <!-- Direct Mode Input -->
+
+                                                                                                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+
+                                                                                                                                    <DockPanel.Style>
+
+                                                                                                                                        <Style TargetType="DockPanel">
+
+                                                                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+
+                                                                                                                                            <Style.Triggers>
+
+                                                                                                                                                <DataTrigger Binding="{Binding SourceType}" Value="Direct">
+
+                                                                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+
+                                                                                                                                                </DataTrigger>
+
+                                                                                                                                            </Style.Triggers>
+
+                                                                                                                                        </Style>
+
+                                                                                                                                    </DockPanel.Style>
+
+                                                                                                                                    <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="70"/>
+
+                                                                                                                                    <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
+
+                                                                                                                                            Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                            CommandParameter="{Binding .}"
+
+                                                                                                                                            ToolTip="Refresh Process List"/>
+
+                                                                                                                                    <components:VariableSelector ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                                                Text="{Binding ProcessName, Mode=TwoWay}"
+
+                                                                                                                                                                ToolTip="Process Name or Window Title Part"/>
+
+                                                                                                                                </DockPanel>
+
+                                                                                
+
+                                                                                                                                <!-- Variable Mode Input -->
+
+                                                                                                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+
+                                                                                                                                    <DockPanel.Style>
+
+                                                                                                                                        <Style TargetType="DockPanel">
+
+                                                                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+
+                                                                                                                                            <Style.Triggers>
+
+                                                                                                                                                <DataTrigger Binding="{Binding SourceType}" Value="Variable">
+
+                                                                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+
+                                                                                                                                                </DataTrigger>
+
+                                                                                                                                            </Style.Triggers>
+
+                                                                                                                                        </Style>
+
+                                                                                                                                    </DockPanel.Style>
+
+                                                                                                                                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+
+                                                                                                                                    <components:VariableSelector ItemsSource="{Binding DataContext.AvailableIntVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                                                Text="{Binding ProcessNameVariable, Mode=TwoWay}"
+
+                                                                                                                                                                ToolTip="대상 이름을 담고 있는 변수를 선택하세요."/>
+
+                                                                                                                                </DockPanel>                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                     <TextBlock Text="조건 확인:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
                                                     <RadioButton Content="실행 중 (Running)" GroupName="ProcRunPre" 
                                                                  IsChecked="{Binding IsCheckRunning, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=True}" 
@@ -1880,29 +2111,119 @@
                                             </StackPanel>
                                         </DataTemplate>
 
-                                        <!-- Proxy Binding for ProcessRunningCondition (Post) -->
-                                        <DataTemplate DataType="{x:Type models:ProcessRunningCondition}">
-                                            <StackPanel Margin="5">
-                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
-                                                    <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="70"/>
-                                                                        <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
-                                                                                Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                                CommandParameter="{Binding .}"
-                                                                                ToolTip="Refresh Process List"/>                                                    <components:VariableSelector ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                                                        Text="{Binding ProcessName, Mode=TwoWay}"
-                                                                                                        ToolTip="Process Name or Window Title Part"/>
-                                                </DockPanel>
+                                                                                                                        <!-- Proxy Binding for ProcessRunningCondition (Post) -->
 
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
-                                                    <RadioButton Content="프로세스 이름" GroupName="ProcRunPostSearch" 
-                                                                 IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=ProcessName}" 
-                                                                 Margin="0,0,15,0"/>
-                                                    <RadioButton Content="윈도우 타이틀" GroupName="ProcRunPostSearch"
-                                                                 IsChecked="{Binding SearchMethod, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=WindowTitle}"/>
-                                                </StackPanel>
+                                                                                                                        <DataTemplate DataType="{x:Type models:ProcessRunningCondition}">
 
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                                                                                            <StackPanel Margin="5">
+
+                                                                                                                                <!-- Input Source Selection -->
+
+                                                                                                                                <TextBlock Text="입력 소스 (Input Source):" Margin="0,0,0,5" Foreground="Gray"/>
+
+                                                                                                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+
+                                                                                                                                    <RadioButton Content="직접 입력 (Direct)" GroupName="ProcRunPostSrc" Margin="0,0,15,0"
+
+                                                                                                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Direct}"/>
+
+                                                                                                                                    <RadioButton Content="변수값 (Variable)" GroupName="ProcRunPostSrc"
+
+                                                                                                                                                 IsChecked="{Binding SourceType, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Variable}"
+
+                                                                                                                                                 ToolTip="변수에 저장된 문자열을 대상 이름으로 사용합니다."/>
+
+                                                                                                                                </StackPanel>
+
+                                                                                
+
+                                                                                                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+
+                                                                                                                                    <TextBlock Text="검색 기준:" VerticalAlignment="Center" Width="70"/>
+
+                                                                                                                                    <ComboBox ItemsSource="{Binding DataContext.SearchMethods, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                              SelectedItem="{Binding SearchMethod}"/>
+
+                                                                                                                                </DockPanel>
+
+                                                                                
+
+                                                                                                                                <!-- Direct Mode Input -->
+
+                                                                                                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+
+                                                                                                                                    <DockPanel.Style>
+
+                                                                                                                                        <Style TargetType="DockPanel">
+
+                                                                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+
+                                                                                                                                            <Style.Triggers>
+
+                                                                                                                                                <DataTrigger Binding="{Binding SourceType}" Value="Direct">
+
+                                                                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+
+                                                                                                                                                </DataTrigger>
+
+                                                                                                                                            </Style.Triggers>
+
+                                                                                                                                        </Style>
+
+                                                                                                                                    </DockPanel.Style>
+
+                                                                                                                                    <TextBlock Text="대상 이름:" VerticalAlignment="Center" Width="70"/>
+
+                                                                                                                                                        <Button DockPanel.Dock="Right" Content="⟳" Width="25" Margin="5,0,0,0"
+
+                                                                                                                                                                Command="{Binding DataContext.RefreshContextTargetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                                                CommandParameter="{Binding .}"
+
+                                                                                                                                                                ToolTip="Refresh Process List"/>                                                    <components:VariableSelector ItemsSource="{Binding DataContext.ProcessList, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                                                                        Text="{Binding ProcessName, Mode=TwoWay}"
+
+                                                                                                                                                                                        ToolTip="Process Name or Window Title Part"/>
+
+                                                                                                                                </DockPanel>
+
+                                                                                
+
+                                                                                                                                <!-- Variable Mode Input -->
+
+                                                                                                                                <DockPanel LastChildFill="True" Margin="0,0,0,10">
+
+                                                                                                                                    <DockPanel.Style>
+
+                                                                                                                                        <Style TargetType="DockPanel">
+
+                                                                                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+
+                                                                                                                                            <Style.Triggers>
+
+                                                                                                                                                <DataTrigger Binding="{Binding SourceType}" Value="Variable">
+
+                                                                                                                                                    <Setter Property="Visibility" Value="Visible"/>
+
+                                                                                                                                                </DataTrigger>
+
+                                                                                                                                            </Style.Triggers>
+
+                                                                                                                                        </Style>
+
+                                                                                                                                    </DockPanel.Style>
+
+                                                                                                                                    <TextBlock Text="변수명:" VerticalAlignment="Center" Width="70"/>
+
+                                                                                                                                    <components:VariableSelector ItemsSource="{Binding DataContext.AvailableIntVariables, RelativeSource={RelativeSource AncestorType=UserControl}}"
+
+                                                                                                                                                                Text="{Binding ProcessNameVariable, Mode=TwoWay}"
+
+                                                                                                                                                                ToolTip="대상 이름을 담고 있는 변수를 선택하세요."/>
+
+                                                                                                                                </DockPanel>                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                     <TextBlock Text="조건 확인:" VerticalAlignment="Center" Width="70" Margin="0,0,5,0"/>
                                                     <RadioButton Content="실행 중 (Running)" GroupName="ProcRunPost" 
                                                                  IsChecked="{Binding IsCheckRunning, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=True}" 

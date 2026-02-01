@@ -44,6 +44,10 @@
      - **점프 대상 선택**: `ComboBox`를 직접 사용하지 말고 반드시 `JumpTargetSelector`를 사용할 것. (목록 갱신 시 데이터 유실 방지 로직 내장)
      - **변수 및 프로세스 입력**: `IsEditable`이 필요한 경우 `VariableSelector`를 사용할 것. (입력 즉시 반영 및 텍스트 유실 방지 로직 내장)
      - **Proxy 바인딩 패턴**: 트리뷰 노드 전환 시 데이터 유실을 막기 위해, `SwitchCaseItem` 등 컬렉션 내부 아이템은 반드시 ViewModel 래퍼(Proxy)를 거쳐 바인딩할 것.
+  16. **2026-01-28 : 데이터 무결성 규칙 (Smart Update)**
+     - 콤보박스와 바인딩된 컬렉션(`ObservableCollection`)은 무조건 `Clear()`/`Add()` 하지 말고, `SequenceEqual` 등으로 **변경 사항이 있을 때만 갱신**해야 함. (불필요한 UI 리셋 방지)
+     - 커스텀 컨트롤(`VariableSelector` 등)은 `ItemsSource` 변경 시 시스템이 자동으로 `null/empty`로 초기화하는 것을 방어하는 로직(`_isInternalChange`, 복구 로직)을 반드시 포함해야 함.
+  17. **일시정지(Pause) 구현**: 엔진 루프 내부에 `while(IsPaused) await Task.Delay` 패턴을 사용하여 즉각적인 반응성을 확보하고, UI에서는 [재개] 버튼으로 상태를 명확히 표시함.
 --- 
 - `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
 - `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

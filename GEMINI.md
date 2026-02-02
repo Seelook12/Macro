@@ -48,6 +48,9 @@
      - 콤보박스와 바인딩된 컬렉션(`ObservableCollection`)은 무조건 `Clear()`/`Add()` 하지 말고, `SequenceEqual` 등으로 **변경 사항이 있을 때만 갱신**해야 함. (불필요한 UI 리셋 방지)
      - 커스텀 컨트롤(`VariableSelector` 등)은 `ItemsSource` 변경 시 시스템이 자동으로 `null/empty`로 초기화하는 것을 방어하는 로직(`_isInternalChange`, 복구 로직)을 반드시 포함해야 함.
   17. **일시정지(Pause) 구현**: 엔진 루프 내부에 `while(IsPaused) await Task.Delay` 패턴을 사용하여 즉각적인 반응성을 확보하고, UI에서는 [재개] 버튼으로 상태를 명확히 표시함.
+  18. **2026-02-01 : 그룹 컨텍스트 바인딩 보호**: `VariableSelector`를 사용할 때 `ItemsSource`를 단순 갱신(`Clear/Add`)하면 내부 보호 로직이 작동하지 않으므로, 반드시 **새 컬렉션 인스턴스를 할당(`new ObservableCollection`)**하여 보호 로직을 트리거해야 함.
+  19. **2026-02-01 : 인코딩 안전성**: UI 표시용 문자열(점프 대상 등)에 이모지를 사용하면 인코딩(CP949/UTF-8) 문제로 깨질 수 있으므로, 반드시 `[Step]`, `[Group]` 등의 텍스트 라벨을 사용할 것.
+  20. **코드 포맷팅 엄수**: 불필요한 줄바꿈(Blank lines)을 과도하게 생성하지 말 것. 메서드 내에서는 논리적 블록 사이에 1줄만 띄우고, 중괄호(`{}`) 시작 전후에 불필요한 공백을 두지 않는다. 특히 들여쓰기가 깊어질 때 탭/공백이 증식되지 않도록 주의한다.
 --- 
 - `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
 - `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

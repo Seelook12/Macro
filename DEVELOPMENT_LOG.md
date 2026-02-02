@@ -321,6 +321,35 @@
   2. **Deferred Synchronization**: `JumpTargetSelector.xaml.cs`에서 `OnItemsSourceChanged` 시점에 `Dispatcher.InvokeAsync`를 사용하여, 내부 바인딩 갱신이 완료된 후 선택값을 동기화하도록 개선.
   3. **Binding Error Cleanup**: `SequenceGroup` 모델에 `IsGroupStart/End` 더미 속성을 추가하여 트리뷰 스타일에서 발생하던 `Path Error` 로그 제거.
 
+### 3.37. 실행 엔진 분기 로직 강화 및 UI/UX 표준화 (2026-02-01)
+- **그룹 종료 조건(Post-Condition) 분기 수정**: 
+    - 엔진(`MacroEngineService`)이 그룹 종료 시점의 `Switch Case` 분기 신호를 처리하지 않던 문제 해결.
+    - `PostCondition` 실행 직후 `GetForceJumpId`를 감지하여 즉시 이동하도록 파이프라인 보완.
+- **VariableCompareCondition 분기 노드화**:
+    - 기존 '실패 시 중단' 방식에서 '**조건 만족 시 이동(Jump on True)**' 방식으로 로직 변경.
+    - `CheckAsync`는 항상 `true`를 반환하게 하여 엔진 중단을 방지하고, `GetForceJumpId`를 통해 조건부 점프 수행.
+    - UI 라벨을 "조건 만족 시 이동 (True)"으로 변경하여 의미 명확화.
+- **동적 프로세스 지정 (Variable Source)**:
+    - `ProcessRunningCondition` 및 `대상 윈도우 설정(Global Context)`에 **입력 소스(직접 입력 / 변수값)** 선택 기능 도입.
+    - 변수에 저장된 문자열(프로세스명 또는 윈도우 타이틀)을 실행 시점에 해석하여 동적으로 타겟팅 가능.
+- **UI/UX 일관성 및 안정화**:
+    - **레이아웃 통일**: 모든 프로세스 감지 UI를 [검색 기준 -> 대상 이름] 순서로 재배치하고 ComboBox 스타일로 통일.
+    - **복합 액션 편집 개선**: `MultiAction` 내부에 포함된 마우스 클릭 액션에서도 [현재위치] 좌표 픽업 버튼이 활성화되도록 커맨드 로직(`PickCoordinateCommand`) 개선.
+    - **VariableSelector 버그 수정**: `ItemsSource` 변경 시 시스템이 텍스트를 초기화하는 것을 방어하되, 사용자가 수동으로 텍스트를 지우는 것은 허용하도록 로직 정교화.
+- **빌드 안정화**: `SequenceItem` 클래스에 누락되었던 `TargetNameSource`, `TargetProcessNameVariable` 필드 및 속성을 추가하여 컴파일 에러(`CS1061`) 최종 해결.
+
+### 3.38. 그룹 대상 윈도우 변수 바인딩 안정화 (2026-02-01)
+- **현상**: 그룹 설정(Global Context)에서 `대상 윈도우 변수명` 입력 후 다른 스텝/그룹 이동 시 값이 사라지는 현상.
+- **원인**: `VariableSelector`의 내부 보호 로직(`_isInternalChange`)은 `ItemsSource`가 **변경(새 인스턴스 할당)**될 때만 작동하는데, `TeachingViewModel`에서는 `Clear/Add`로 내용을 수정하여 보호 로직이 작동하지 않음. 이로 인해 WPF ComboBox가 리스트 갱신 시 `Text`를 초기화함.
+- **해결**: 
+    - `TeachingViewModel`에서 `AvailableIntVariables`와 `AvailableCoordinateVariables` 갱신 시 `Clear/Add` 대신 `new ObservableCollection`을 할당하도록 수정.
+    - 이를 통해 `VariableSelector`의 `OnItemsSourceChanged`가 트리거되어 데이터 유실 보호 로직이 정상 작동하도록 조치. (ViewModel Proxy 방식에서 Control Protection 방식으로 회귀 및 최적화)
+
+### 3.39. 인코딩 이슈 해결 (2026-02-01)
+- **현상**: 점프 대상 목록(`JumpTargetSelector`)에서 스텝 이름 앞에 `?뱞`과 같은 깨진 문자가 표시됨.
+- **원인**: 소스 코드 상에 포함된 이모지(📄, 📁 등)가 인코딩 호환성 문제로 인해 런타임에 올바르게 표시되지 않음 (Mojibake).
+- **해결**: 모든 이모지 문자를 `[Step]`, `[Group]`, `[External]` 등의 안전한 텍스트 라벨로 교체하여 인코딩 독립성을 확보하고 UI 가독성을 개선함.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
 - **주요 해결 사항**: 

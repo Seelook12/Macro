@@ -279,7 +279,8 @@
                 </DockPanel>
 
                 <DockPanel>
-                    <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                    <TextBlock Text="조건 만족 시 이동 (True):" VerticalAlignment="Center" Width="140" Foreground="#2E7D32" FontWeight="Bold"
+                               ToolTip="조건이 참(True)일 때 지정된 스텝으로 이동합니다. 거짓이면 다음 스텝으로 진행합니다."/>
                     <components:JumpTargetSelector ItemsSource="{Binding DataContext.JumpTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   SelectedId="{Binding FailJumpId, Mode=TwoWay}"/>
                 </DockPanel>
@@ -490,6 +491,7 @@
                     <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
                     <Button Grid.Column="4" Content="현재위치" Padding="5,0" 
                             Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding .}"
                             ToolTip="화면을 캡처하여 클릭한 위치의 좌표를 가져옵니다."/>
                 </Grid>
 
@@ -805,11 +807,11 @@
                                 <TextBlock Margin="0,0,5,0">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="📁"/>
+                                            <Setter Property="Text" Value="[G]"/>
                                             <Setter Property="Foreground" Value="#FFA000"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsStartGroup}" Value="True">
-                                                    <Setter Property="Text" Value="🏁"/>
+                                                    <Setter Property="Text" Value="[START]"/>
                                                     <Setter Property="Foreground" Value="#D32F2F"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -1167,12 +1169,15 @@
                                                                                 <ComboBoxItem Content="=="/><ComboBoxItem Content="!="/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&lt;"/><ComboBoxItem Content="&gt;="/><ComboBoxItem Content="&lt;="/><ComboBoxItem Content="Contains"/>
                                                                             </ComboBox>
                                                                         </Grid>
+                                                                        
                                                                         <DockPanel LastChildFill="True" Margin="0,0,0,10">
                                                                             <TextBlock Text="비교값:" VerticalAlignment="Center" Width="70"/>
                                                                             <TextBox Text="{Binding TargetValue, UpdateSourceTrigger=PropertyChanged}"/>
                                                                         </DockPanel>
+
                                                                         <DockPanel>
-                                                                            <TextBlock Text="실패 시 이동:" VerticalAlignment="Center" Width="80" Foreground="#C62828" FontWeight="Bold"/>
+                                                                            <TextBlock Text="조건 만족 시 이동 (True):" VerticalAlignment="Center" Width="140" Foreground="#2E7D32" FontWeight="Bold"
+                                                                                       ToolTip="조건이 참(True)일 때 지정된 그룹으로 이동합니다. 거짓이면 다음 그룹으로 진행합니다."/>
                                                                             <components:JumpTargetSelector ItemsSource="{Binding DataContext.AvailableGroupExitTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                                                           SelectedId="{Binding DataContext.SelectedGroupPostConditionFailJumpId, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}"/>
                                                                         </DockPanel>
@@ -1848,6 +1853,7 @@
                                                     <TextBox Grid.Column="3" Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
                                                     <Button Grid.Column="4" Content="현재위치" Padding="5,0" 
                                                             Command="{Binding DataContext.PickCoordinateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding .}"
                                                             ToolTip="화면을 캡처하여 클릭한 위치의 좌표를 가져옵니다."/>
                                                 </Grid>
 

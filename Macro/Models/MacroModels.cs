@@ -220,12 +220,20 @@ namespace Macro.Models
         private System.Windows.Point? _foundPoint;
         private double _testScore;
         private string _testResult = "Not Tested";
+        private System.Windows.Media.Imaging.BitmapSource? _debugImage;
 
         [JsonIgnore]
         public System.Windows.Point? FoundPoint
         {
             get => _foundPoint;
             private set => this.RaiseAndSetIfChanged(ref _foundPoint, value);
+        }
+
+        [JsonIgnore]
+        public System.Windows.Media.Imaging.BitmapSource? DebugImage
+        {
+            get => _debugImage;
+            set => this.RaiseAndSetIfChanged(ref _debugImage, value);
         }
 
         [JsonIgnore]
@@ -568,33 +576,42 @@ namespace Macro.Models
 
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
-            return await Task.Run(() =>
+            // 분기(Branching) 전용 노드로 동작하므로, 엔진 레벨의 '실패'는 발생시키지 않음.
+            return await Task.FromResult(true);
+        }
+
+        public Guid? GetForceJumpId()
+        {
+            var vars = MacroEngineService.Instance.Variables;
+            string currentValue = vars.ContainsKey(VariableName) ? vars[VariableName] : string.Empty;
+            bool isConditionMet = false;
+
+            switch (Operator)
             {
-                if (token.IsCancellationRequested) return false;
+                case "==": isConditionMet = currentValue == TargetValue; break;
+                case "!=": isConditionMet = currentValue != TargetValue; break;
+                case "Contains": isConditionMet = currentValue.Contains(TargetValue); break;
+                case ">":
+                case "<":
+                case ">=":
+                case "<=":
+                    if (double.TryParse(currentValue, out double cur) && double.TryParse(TargetValue, out double tar))
+                    {
+                        if (Operator == ">") isConditionMet = cur > tar;
+                        else if (Operator == "<") isConditionMet = cur < tar;
+                        else if (Operator == ">=") isConditionMet = cur >= tar;
+                        else if (Operator == "<=") isConditionMet = cur <= tar;
+                    }
+                    break;
+            }
 
-                var vars = MacroEngineService.Instance.Variables;
-                string currentValue = vars.ContainsKey(VariableName) ? vars[VariableName] : string.Empty;
+            // 조건 만족(True) 시 점프 ID 반환
+            if (isConditionMet && Guid.TryParse(FailJumpId, out var guid))
+            {
+                return guid;
+            }
 
-                switch (Operator)
-                {
-                    case "==": return currentValue == TargetValue;
-                    case "!=": return currentValue != TargetValue;
-                    case "Contains": return currentValue.Contains(TargetValue);
-                    case ">":
-                    case "<":
-                    case ">=":
-                    case "<=":
-                        if (double.TryParse(currentValue, out double cur) && double.TryParse(TargetValue, out double tar))
-                        {
-                            if (Operator == ">") return cur > tar;
-                            if (Operator == "<") return cur < tar;
-                            if (Operator == ">=") return cur >= tar;
-                            if (Operator == "<=") return cur <= tar;
-                        }
-                        return false;
-                    default: return false;
-                }
-            }, token);
+            return null;
         }
     }
 

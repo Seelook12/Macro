@@ -197,60 +197,60 @@ namespace Macro.Services
 
                         AddLog($"[Step {stepIndex}] '{item.Name}' 처리 시작");
 
-                                                bool allRepeatsSuccess = true;
-                                                string? jumpTargetName = null;
-                                                string? jumpTargetId = null;
-                        
-                                                for (int repeat = 1; repeat <= item.RepeatCount; repeat++)
-                                                {
-                                                    if (token.IsCancellationRequested) break;
+                        bool allRepeatsSuccess = true;
+                        string? jumpTargetName = null;
+                        string? jumpTargetId = null;
 
-                                                    // Paused Check (Inner Loop)
-                                                    while (IsPaused)
-                                                    {
-                                                        if (token.IsCancellationRequested) break;
-                                                        await Task.Delay(100, token);
-                                                    }
-                                                    if (token.IsCancellationRequested) break;
-                                                    
-                                                    if (item.RepeatCount > 1)
-                                                    {
-                                                        AddLog($"  - 반복 실행 중 ({repeat}/{item.RepeatCount})");
-                                                    }
-                        
-                                                    int retryAttempt = 0;
-                                                    bool stepSuccess = false;
-                                                    System.Windows.Point? foundPoint = null;
-                        
-                                                    while (!stepSuccess)
-                                                    {
-                                                        if (token.IsCancellationRequested) break;
-                        
-                                                        try
-                                                        {
-                                                            // 0. Coordinate Setup
-                                                            if (item.CoordinateMode == CoordinateMode.WindowRelative)
-                                                            {
-                                                                try 
-                                                                {
-                                                                    ConfigureRelativeCoordinates(item);
-                                                                }
-                                                                catch (Exception ex)
-                                                                {
-                                                                     if (!string.IsNullOrEmpty(item.ProcessNotFoundJumpName))
-                                                                     {
-                                                                         throw new ComponentFailureException($"Target Process Error: {ex.Message}", item.ProcessNotFoundJumpName, "");
-                                                                     }
-                                                                     throw;
-                                                                }
-                                                            }
-                                                            else
-                                                            {
-                                                                ResetCoordinates(item);
-                                                            }
+                        for (int repeat = 1; repeat <= item.RepeatCount; repeat++)
+                        {
+                            if (token.IsCancellationRequested) break;
 
-                                                            // 1. PreCondition
-                                                            if (item.PreCondition != null)
+                            // Paused Check (Inner Loop)
+                            while (IsPaused)
+                            {
+                                if (token.IsCancellationRequested) break;
+                                await Task.Delay(100, token);
+                            }
+                            if (token.IsCancellationRequested) break;
+
+                            if (item.RepeatCount > 1)
+                            {
+                                AddLog($"  - 반복 실행 중 ({repeat}/{item.RepeatCount})");
+                            }
+                        
+                            int retryAttempt = 0;
+                            bool stepSuccess = false;
+                            System.Windows.Point? foundPoint = null;
+
+                            while (!stepSuccess)
+                            {
+                                if (token.IsCancellationRequested) break;
+
+                                try
+                                {
+                                    // 0. Coordinate Setup
+                                    if (item.CoordinateMode == CoordinateMode.WindowRelative)
+                                    {
+                                        try 
+                                        {
+                                            ConfigureRelativeCoordinates(item);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                             if (!string.IsNullOrEmpty(item.ProcessNotFoundJumpName))
+                                             {
+                                                 throw new ComponentFailureException($"Target Process Error: {ex.Message}", item.ProcessNotFoundJumpName, "");
+                                             }
+                                             throw;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ResetCoordinates(item);
+                                    }
+
+                                    // 1. PreCondition
+                                    if (item.PreCondition != null)
                                                             {
                                                                 AddLog($"    - 조건 확인 중: {GetTypeName(item.PreCondition)} (시도 {retryAttempt + 1})");
                                                                 bool check = await item.PreCondition.CheckAsync(token);
@@ -268,148 +268,148 @@ namespace Macro.Services
                                                                 }
                                                             }
                         
-                                                            // 2. Action 실행 전 데이터 주입 (GrayChangeCondition 등)
-                                                            if (item.PostCondition is GrayChangeCondition gcc)
-                                                            {
-                                                                // Dispatcher.Invoke 제거: 데드락 방지 및 성능 향상
-                                                                var captureData = await Task.Run(() => 
-                                                                {
-                                                                    var bmp = ScreenCaptureHelper.GetScreenCapture();
-                                                                    var bounds = ScreenCaptureHelper.GetScreenBounds();
-                                                                    bmp?.Freeze();
-                                                                    return new { Image = bmp, Bounds = bounds };
-                                                                });
-                        
-                                                                if (captureData?.Image != null)
-                                                                {
-                                                                    // 절대 좌표를 이미지 로컬 좌표로 변환
-                                                                    // gcc는 이미 ConfigureRelativeCoordinates에 의해 Transform이 설정된 상태임.
-                                                                    // 하지만 여기서는 프로퍼티(X, Y) 접근 시 자동으로 계산되지 않으므로 수동 계산 필요할 수 있으나,
-                                                                    // GrayChangeCondition은 ISupportCoordinateTransform을 구현하며 이미 스케일이 적용된 상태가 아님.
-                                                                    // 아, ConfigureRelativeCoordinates는 gcc의 private 필드(_scaleX 등)를 설정함.
-                                                                    // gcc.X는 원본 좌표임.
-                                                                    // 따라서 gcc 내부 로직과 유사하게 계산해야 함.
-                                                                    
-                                                                    // 하지만 private 필드에 접근할 수 없으므로...
-                                                                    // 잠깐, gcc 객체 자체는 모델이고 SetTransform으로 스케일이 주입됨.
-                                                                    // 그러나 외부에서 계산하려면 public 메서드나 속성이 필요함.
-                                                                    // 가장 좋은 방법: GrayChangeCondition에 'MeasureCurrentValue(capture, bounds)' 메서드를 추가하는 것.
-                                                                    // 하지만 인터페이스 변경이 부담스러우니, 여기서 Reflection이나 유사 로직을 써야 하나?
-                                                                    // 아니, GrayChangeCondition은 모델 클래스이므로 로직을 캡슐화하는 게 맞음.
-                                                                    // GetCurrentValue(BitmapSource, bounds) 메서드를 추가하자.
-                                                                    
-                                                                    // 임시 방편: gcc의 private 필드를 읽을 수 없으니...
-                                                                    // 아니, gcc는 이미 _scaleX 등이 세팅되어 있음.
-                                                                    // 외부에서 계산하려면 gcc의 X, Y, Width, Height만 알면 안 되고 _scaleX도 알아야 함.
-                                                                    // GrayChangeCondition에 `Measure(BitmapSource, bounds)` 메서드를 추가하는 게 정석임.
-                                                                    
-                                                                    // 일단 여기서는 기존 로직대로 하되, _scaleX 등에 접근할 수 없다는 문제를 해결해야 함.
-                                                                    // 아, `ImageSearchService.GetGrayAverage` 호출 시 좌표를 넘겨야 하는데...
-                                                                    // gcc 내부 필드를 못 읽음.
-                                                                    
-                                                                    // 해결책: GrayChangeCondition에 `UpdateReferenceValue(capture, bounds)` 메서드 추가.
-                                                                    gcc.UpdateReferenceValue(captureData.Image, captureData.Bounds);
-                                                                    
-                                                                    AddLog($"    - [Gray] 기준값 측정 완료: {gcc.ReferenceValue:F2}");
-                                                                }
-                                                            }
-                        
-                                                            // 2. Action 실행
-                                                            if (token.IsCancellationRequested) break;
-                                                            AddLog($"    - 동작 실행 중: {GetTypeName(item.Action)}");
-                                                            try
-                                                            {
-                                                                await item.Action.ExecuteAsync(token, foundPoint);
-                                                            }
-                                                            catch (Exception ex)
-                                                            {
-                                                                throw new ComponentFailureException($"Action 실행 실패: {ex.Message}", item.Action.FailJumpName, item.Action.FailJumpId);
-                                                            }
-                        
-                                                            // 3. PostCondition
-                                                            if (item.PostCondition != null)
-                                                            {
-                                                                if (token.IsCancellationRequested) break;
-                                                                AddLog($"    - 결과 확인 중: {GetTypeName(item.PostCondition)}");
-                                                                bool check = await item.PostCondition.CheckAsync(token);
-                                                                if (!check)
-                                                                {
-                                                                    throw new ComponentFailureException($"PostCondition 실패: {item.Name}", item.PostCondition.FailJumpName, item.PostCondition.FailJumpId);
-                                                                }
+                                    // 2. Action 실행 전 데이터 주입 (GrayChangeCondition 등)
+                                    if (item.PostCondition is GrayChangeCondition gcc)
+                                    {
+                                        // Dispatcher.Invoke 제거: 데드락 방지 및 성능 향상
+                                        var captureData = await Task.Run(() => 
+                                        {
+                                            var bmp = ScreenCaptureHelper.GetScreenCapture();
+                                            var bounds = ScreenCaptureHelper.GetScreenBounds();
+                                            bmp?.Freeze();
+                                            return new { Image = bmp, Bounds = bounds };
+                                        });
 
-                                                                // [Fix] PostCondition SwitchCase 강제 분기 확인
-                                                                var forceJumpId = item.PostCondition.GetForceJumpId();
-                                                                
-                                                                // [Debug] SwitchCase 로그
-                                                                if (item.PostCondition is SwitchCaseCondition sc)
-                                                                {
-                                                                    if (Variables.TryGetValue(sc.TargetVariableName, out var valStr))
-                                                                    {
-                                                                        if (int.TryParse(valStr, out int valInt))
-                                                                        {
-                                                                            AddLog($"    [SwitchCase] Var '{sc.TargetVariableName}'={valInt}. Checking {sc.Cases.Count} cases. JumpId: {(forceJumpId.HasValue ? forceJumpId.ToString() : "None")}");
-                                                                        }
-                                                                        else
-                                                                        {
-                                                                            AddLog($"    [SwitchCase] Warning: Var '{sc.TargetVariableName}' value '{valStr}' is not an integer.");
-                                                                        }
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        AddLog($"    [SwitchCase] Warning: Variable '{sc.TargetVariableName}' not found in runtime variables.");
-                                                                    }
-                                                                }
+                                        if (captureData?.Image != null)
+                                        {
+                                            // 절대 좌표를 이미지 로컬 좌표로 변환
+                                            // gcc는 이미 ConfigureRelativeCoordinates에 의해 Transform이 설정된 상태임.
+                                            // 하지만 여기서는 프로퍼티(X, Y) 접근 시 자동으로 계산되지 않으므로 수동 계산 필요할 수 있으나,
+                                            // GrayChangeCondition은 ISupportCoordinateTransform을 구현하며 이미 스케일이 적용된 상태가 아님.
+                                            // 아, ConfigureRelativeCoordinates는 gcc의 private 필드(_scaleX 등)를 설정함.
+                                            // gcc.X는 원본 좌표임.
+                                            // 따라서 gcc 내부 로직과 유사하게 계산해야 함.
+                                            
+                                            // 하지만 private 필드에 접근할 수 없으므로...
+                                            // 잠깐, gcc 객체 자체는 모델이고 SetTransform으로 스케일이 주입됨.
+                                            // 그러나 외부에서 계산하려면 public 메서드나 속성이 필요함.
+                                            // 가장 좋은 방법: GrayChangeCondition에 'MeasureCurrentValue(capture, bounds)' 메서드를 추가하는 것.
+                                            // 하지만 인터페이스 변경이 부담스러우니, 여기서 Reflection이나 유사 로직을 써야 하나?
+                                            // 아니, GrayChangeCondition은 모델 클래스이므로 로직을 캡슐화하는 게 맞음.
+                                            // GetCurrentValue(BitmapSource, bounds) 메서드를 추가하자.
+                                            
+                                            // 임시 방편: gcc의 private 필드를 읽을 수 없으니...
+                                            // 아니, gcc는 이미 _scaleX 등이 세팅되어 있음.
+                                            // 외부에서 계산하려면 gcc의 X, Y, Width, Height만 알면 안 되고 _scaleX도 알아야 함.
+                                            // GrayChangeCondition에 `Measure(BitmapSource, bounds)` 메서드를 추가하는 게 정석임.
+                                            
+                                            // 일단 여기서는 기존 로직대로 하되, _scaleX 등에 접근할 수 없다는 문제를 해결해야 함.
+                                            // 아, `ImageSearchService.GetGrayAverage` 호출 시 좌표를 넘겨야 하는데...
+                                            // gcc 내부 필드를 못 읽음.
+                                            
+                                            // 해결책: GrayChangeCondition에 `UpdateReferenceValue(capture, bounds)` 메서드 추가.
+                                            gcc.UpdateReferenceValue(captureData.Image, captureData.Bounds);
+                                            
+                                            AddLog($"    - [Gray] 기준값 측정 완료: {gcc.ReferenceValue:F2}");
+                                        }
+                                    }
+                        
+                                    // 2. Action 실행
+                                    if (token.IsCancellationRequested) break;
+                                    AddLog($"    - 동작 실행 중: {GetTypeName(item.Action)}");
+                                    try
+                                    {
+                                        await item.Action.ExecuteAsync(token, foundPoint);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        throw new ComponentFailureException($"Action 실행 실패: {ex.Message}", item.Action.FailJumpName, item.Action.FailJumpId);
+                                    }
+                        
+                                    // 3. PostCondition
+                                    if (item.PostCondition != null)
+                                    {
+                                        if (token.IsCancellationRequested) break;
+                                        AddLog($"    - 결과 확인 중: {GetTypeName(item.PostCondition)}");
+                                        bool check = await item.PostCondition.CheckAsync(token);
+                                        if (!check)
+                                        {
+                                            throw new ComponentFailureException($"PostCondition 실패: {item.Name}", item.PostCondition.FailJumpName, item.PostCondition.FailJumpId);
+                                        }
 
-                                                                if (forceJumpId.HasValue)
-                                                                {
-                                                                    throw new ForceJumpException(forceJumpId.Value.ToString());
-                                                                }
-                                                            }
-                        
-                                                            stepSuccess = true;
-                                                        }
-                                                        catch (ForceJumpException fjex)
-                                                        {
-                                                            AddLog($"    -> 분기 조건 만족: {fjex.JumpId}");
-                                                            allRepeatsSuccess = false; // 성공으로 치지 않고 분기 처리
-                                                            jumpTargetId = fjex.JumpId;
-                                                            break; 
-                                                        }
-                                                        catch (ComponentFailureException cfex)
-                                                        {
-                                                            if (retryAttempt < item.RetryCount)
-                                                            {
-                                                                retryAttempt++;
-                                                                AddLog($"    !!! 실패: {cfex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
-                                                                await Task.Delay(item.RetryDelayMs, token);
-                                                            }
-                                                            else
-                                                            {
-                                                                AddLog($"    !!! [Step {stepIndex}] 최종 실패: {cfex.Message}");
-                                                                allRepeatsSuccess = false;
-                                                                jumpTargetName = cfex.FailJumpName;
-                                                                jumpTargetId = cfex.FailJumpId;
-                                                                break;
-                                                            }
-                                                        }
-                                                        catch (Exception ex) when (!(ex is OperationCanceledException))
-                                                        {
-                                                            if (retryAttempt < item.RetryCount)
-                                                            {
-                                                                retryAttempt++;
-                                                                AddLog($"    !!! 예상치 못한 오류: {ex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
-                                                                await Task.Delay(item.RetryDelayMs, token);
-                                                            }
-                                                            else
-                                                            {
-                                                                AddLog($"    !!! [Step {stepIndex}] 중단: {ex.Message}");
-                                                                throw;
-                                                            }
-                                                        }
-                                                    }
-                        
-                                                    if (!allRepeatsSuccess || token.IsCancellationRequested) break;
+                                        // [Fix] PostCondition SwitchCase 강제 분기 확인
+                                        var forceJumpId = item.PostCondition.GetForceJumpId();
+                                        
+                                        // [Debug] SwitchCase 로그
+                                        if (item.PostCondition is SwitchCaseCondition sc)
+                                        {
+                                            if (Variables.TryGetValue(sc.TargetVariableName, out var valStr))
+                                            {
+                                                if (int.TryParse(valStr, out int valInt))
+                                                {
+                                                    AddLog($"    [SwitchCase] Var '{sc.TargetVariableName}'={valInt}. Checking {sc.Cases.Count} cases. JumpId: {(forceJumpId.HasValue ? forceJumpId.ToString() : "None")}");
                                                 }
+                                                else
+                                                {
+                                                    AddLog($"    [SwitchCase] Warning: Var '{sc.TargetVariableName}' value '{valStr}' is not an integer.");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                AddLog($"    [SwitchCase] Warning: Variable '{sc.TargetVariableName}' not found in runtime variables.");
+                                            }
+                                        }
+
+                                        if (forceJumpId.HasValue)
+                                        {
+                                            throw new ForceJumpException(forceJumpId.Value.ToString());
+                                        }
+                                    }
+
+                                    stepSuccess = true;
+                                }
+                                catch (ForceJumpException fjex)
+                                {
+                                    AddLog($"    -> 분기 조건 만족: {fjex.JumpId}");
+                                    allRepeatsSuccess = false; // 성공으로 치지 않고 분기 처리
+                                    jumpTargetId = fjex.JumpId;
+                                    break; 
+                                }
+                                catch (ComponentFailureException cfex)
+                                {
+                                    if (retryAttempt < item.RetryCount)
+                                    {
+                                        retryAttempt++;
+                                        AddLog($"    !!! 실패: {cfex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
+                                        await Task.Delay(item.RetryDelayMs, token);
+                                    }
+                                    else
+                                    {
+                                        AddLog($"    !!! [Step {stepIndex}] 최종 실패: {cfex.Message}");
+                                        allRepeatsSuccess = false;
+                                        jumpTargetName = cfex.FailJumpName;
+                                        jumpTargetId = cfex.FailJumpId;
+                                        break;
+                                    }
+                                }
+                                catch (Exception ex) when (!(ex is OperationCanceledException))
+                                {
+                                    if (retryAttempt < item.RetryCount)
+                                    {
+                                        retryAttempt++;
+                                        AddLog($"    !!! 예상치 못한 오류: {ex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
+                                        await Task.Delay(item.RetryDelayMs, token);
+                                    }
+                                    else
+                                    {
+                                        AddLog($"    !!! [Step {stepIndex}] 중단: {ex.Message}");
+                                        throw;
+                                    }
+                                }
+                            }
+
+                            if (!allRepeatsSuccess || token.IsCancellationRequested) break;
+                        }
                         if (token.IsCancellationRequested) break;
 
                         // 결과에 따른 흐름 제어

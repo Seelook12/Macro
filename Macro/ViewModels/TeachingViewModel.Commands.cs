@@ -25,7 +25,7 @@ namespace Macro.ViewModels
         
         // Interaction
         public Interaction<Unit, System.Windows.Point?> GetCoordinateInteraction { get; } = new Interaction<Unit, System.Windows.Point?>();
-        public ReactiveCommand<Unit, Unit> PickCoordinateCommand { get; private set; } = null!;
+        public ReactiveCommand<MouseClickAction, Unit> PickCoordinateCommand { get; private set; } = null!;
         public ReactiveCommand<CoordinateVariable, Unit> PickVariableCoordinateCommand { get; private set; } = null!;
         public Interaction<Unit, System.Windows.Rect?> GetRegionInteraction { get; } = new Interaction<Unit, System.Windows.Rect?>();
         public Interaction<Unit, string?> CaptureImageInteraction { get; } = new Interaction<Unit, string?>();
@@ -232,8 +232,7 @@ namespace Macro.ViewModels
             RefreshTargetListCommand = ReactiveCommand.CreateFromTask<WindowControlAction>(RefreshTargetListAsync);
             RefreshContextTargetCommand = ReactiveCommand.CreateFromTask<object>(RefreshContextTargetAsync);
 
-            PickCoordinateCommand = ReactiveCommand.CreateFromTask(PickCoordinateAsync, this.WhenAnyValue(x => x.SelectedSequence, x => x.SelectedSequence!.Action, 
-                (item, action) => item != null && action is MouseClickAction));
+            PickCoordinateCommand = ReactiveCommand.CreateFromTask<MouseClickAction>(PickCoordinateAsync);
 
             PickVariableCoordinateCommand = ReactiveCommand.CreateFromTask<CoordinateVariable>(async (variable) => 
             {
@@ -496,34 +495,33 @@ namespace Macro.ViewModels
             });
         }
 
-        private async Task PickCoordinateAsync()
+        private async Task PickCoordinateAsync(MouseClickAction mouseAction)
         {
-            if (SelectedSequence?.Action is MouseClickAction mouseAction)
+            if (mouseAction == null) return;
+
+            var point = await GetCoordinateInteraction.Handle(Unit.Default);
+            if (point.HasValue)
             {
-                var point = await GetCoordinateInteraction.Handle(Unit.Default);
-                if (point.HasValue)
+                var p = point.Value;
+                
+                var parentGroup = SelectedGroup != null ? ResolveGroupContext(SelectedGroup) : (SelectedSequence != null ? GetEffectiveGroupContext(SelectedSequence) : null);
+
+                if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
                 {
-                    var p = point.Value;
-                    
-                    var parentGroup = GetEffectiveGroupContext(SelectedSequence);
-
-                    if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
+                    var winInfo = GetTargetWindowInfo(parentGroup);
+                    if (winInfo.HasValue)
                     {
-                        var winInfo = GetTargetWindowInfo(parentGroup);
-                        if (winInfo.HasValue)
-                        {
-                            parentGroup.RefWindowWidth = winInfo.Value.Width;
-                            parentGroup.RefWindowHeight = winInfo.Value.Height;
+                        parentGroup.RefWindowWidth = winInfo.Value.Width;
+                        parentGroup.RefWindowHeight = winInfo.Value.Height;
 
-                            mouseAction.X = (int)(p.X - winInfo.Value.X);
-                            mouseAction.Y = (int)(p.Y - winInfo.Value.Y);
-                            return;
-                        }
+                        mouseAction.X = (int)(p.X - winInfo.Value.X);
+                        mouseAction.Y = (int)(p.Y - winInfo.Value.Y);
+                        return;
                     }
-
-                    mouseAction.X = (int)p.X;
-                    mouseAction.Y = (int)p.Y;
                 }
+
+                mouseAction.X = (int)p.X;
+                mouseAction.Y = (int)p.Y;
             }
         }
 

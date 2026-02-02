@@ -51,6 +51,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(IdleAction), typeDiscriminator: nameof(IdleAction))]
     [JsonDerivedType(typeof(WindowControlAction), typeDiscriminator: nameof(WindowControlAction))]
     [JsonDerivedType(typeof(MultiAction), typeDiscriminator: nameof(MultiAction))]
+    [JsonDerivedType(typeof(CurrentTimeAction), typeDiscriminator: nameof(CurrentTimeAction))]
     public interface IMacroAction : IReactiveObject
     {
         Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null);
@@ -864,6 +865,73 @@ namespace Macro.Models
         }
     }
 
+    public class TimeoutCheckCondition : ReactiveObject, IMacroCondition
+    {
+        private IMacroCondition? _inner;
+        private string _startTimeVariableName;
+        private int _timeoutMs;
+        private string _timeoutJumpId;
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        public TimeoutCheckCondition(IMacroCondition? inner, string startTimeVar, int timeoutMs, string timeoutJumpId)
+        {
+            _inner = inner;
+            _startTimeVariableName = startTimeVar;
+            _timeoutMs = timeoutMs;
+            _timeoutJumpId = timeoutJumpId;
+        }
+
+        public System.Windows.Point? FoundPoint => _inner?.FoundPoint;
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public async Task<bool> CheckAsync(CancellationToken token = default)
+        {
+            // 1. Timeout Check
+            var vars = MacroEngineService.Instance.Variables;
+            if (vars.TryGetValue(_startTimeVariableName, out var startTickStr) && long.TryParse(startTickStr, out var startTick))
+            {
+                var elapsed = TimeSpan.FromTicks(DateTime.Now.Ticks - startTick).TotalMilliseconds;
+                if (elapsed > _timeoutMs)
+                {
+                    MacroEngineService.Instance.AddLog($"[Timeout] Group timeout exceeded ({elapsed:F0}ms > {_timeoutMs}ms). Jumping to fallback.");
+                    
+                    // Force jump to timeout target
+                    FailJumpId = _timeoutJumpId; 
+                    return false; 
+                }
+            }
+
+            // 2. Inner Condition Check
+            if (_inner != null)
+            {
+                bool result = await _inner.CheckAsync(token);
+                if (!result)
+                {
+                    // If inner failed, use its fail target
+                    FailJumpId = _inner.FailJumpId;
+                    FailJumpName = _inner.FailJumpName;
+                }
+                return result;
+            }
+
+            return true;
+        }
+
+        public Guid? GetForceJumpId() => _inner?.GetForceJumpId();
+    }
+
     #endregion
 
     #region Action Implementations
@@ -1459,6 +1527,43 @@ namespace Macro.Models
         }
     }
 
+    public class CurrentTimeAction : ReactiveObject, IMacroAction
+    {
+        private string _variableName = string.Empty;
+        private string _failJumpName = string.Empty;
+        private string _failJumpId = string.Empty;
+
+        public string VariableName
+        {
+            get => _variableName;
+            set => this.RaiseAndSetIfChanged(ref _variableName, value);
+        }
+
+        public string FailJumpName
+        {
+            get => _failJumpName;
+            set => this.RaiseAndSetIfChanged(ref _failJumpName, value);
+        }
+
+        public string FailJumpId
+        {
+            get => _failJumpId;
+            set => this.RaiseAndSetIfChanged(ref _failJumpId, value);
+        }
+
+        public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
+        {
+            await Task.Run(() =>
+            {
+                if (!string.IsNullOrEmpty(VariableName))
+                {
+                    long ticks = DateTime.Now.Ticks;
+                    MacroEngineService.Instance.UpdateVariable(VariableName, ticks.ToString());
+                }
+            }, token);
+        }
+    }
+
     #endregion
 
     #region SequenceItem
@@ -1736,6 +1841,10 @@ namespace Macro.Models
         private ObservableCollection<SequenceItem>? _legacyItems;
         private IMacroCondition? _postCondition;
 
+        // Timeout Properties
+        private int _timeoutMs = 0;
+        private string _timeoutJumpId = string.Empty;
+
         // Shared Context Fields
         private CoordinateMode _coordinateMode = CoordinateMode.Global;
         private WindowControlSearchMethod _contextSearchMethod = WindowControlSearchMethod.ProcessName;
@@ -1757,6 +1866,18 @@ namespace Macro.Models
         {
             get => _name;
             set => this.RaiseAndSetIfChanged(ref _name, value);
+        }
+
+        public int TimeoutMs
+        {
+            get => _timeoutMs;
+            set => this.RaiseAndSetIfChanged(ref _timeoutMs, value);
+        }
+
+        public string TimeoutJumpId
+        {
+            get => _timeoutJumpId;
+            set => this.RaiseAndSetIfChanged(ref _timeoutJumpId, value);
         }
 
         public bool IsStartGroup

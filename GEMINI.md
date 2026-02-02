@@ -40,6 +40,11 @@
      - **규칙 1 (Centralization)**: 모든 실행 준비 로직(평탄화, 좌표 변환, 변수 주입)은 반드시 `RecipeCompiler`를 통해야 함. 뷰모델에서 자체적으로 변환 로직을 구현하지 말 것.
      - **규칙 2 (Consistency)**: 전체 실행(`Compile`)과 단일 스텝 테스트(`CompileSingleStep`)는 동일한 컴파일러 로직을 공유하여 실행 결과의 일관성을 보장해야 함.
      - `CoordinateMode`, `TargetProcessName` 등의 컨텍스트는 부모 그룹에서 자식으로 명시적으로 상속되며, 변수 스코프는 계층 구조를 따라 병합(Override)됨.
+     - **타임아웃(Timeout) 구현**:
+       - 엔진 수정 없이 컴파일 타임에 로직을 주입하는 **Decorator Pattern** 사용.
+       - 그룹의 `Start` 스텝(`IsGroupStart`)에 `CurrentTimeAction`을 주입하여 타이머 시작 시간을 변수(`__GroupStart_{ID}`)에 기록.
+       - 그룹 내 모든 스텝의 조건을 `TimeoutCheckCondition`으로 감싸서(Wrapping) 실행 직전 시간을 체크하고, 초과 시 `TimeoutJumpId`로 강제 이동.
+       - 중첩 그룹의 경우 상위 그룹들의 타임아웃 조건을 리스트로 누적하여 다중 체크(Chain Check)를 수행함.
   15. **2026-01-28 : UI 컴포넌트 표준화 규칙**
      - **점프 대상 선택**: `ComboBox`를 직접 사용하지 말고 반드시 `JumpTargetSelector`를 사용할 것. (목록 갱신 시 데이터 유실 방지 로직 내장)
      - **변수 및 프로세스 입력**: `IsEditable`이 필요한 경우 `VariableSelector`를 사용할 것. (입력 즉시 반영 및 텍스트 유실 방지 로직 내장)
@@ -51,6 +56,8 @@
   18. **2026-02-01 : 그룹 컨텍스트 바인딩 보호**: `VariableSelector`를 사용할 때 `ItemsSource`를 단순 갱신(`Clear/Add`)하면 내부 보호 로직이 작동하지 않으므로, 반드시 **새 컬렉션 인스턴스를 할당(`new ObservableCollection`)**하여 보호 로직을 트리거해야 함.
   19. **2026-02-01 : 인코딩 안전성**: UI 표시용 문자열(점프 대상 등)에 이모지를 사용하면 인코딩(CP949/UTF-8) 문제로 깨질 수 있으므로, 반드시 `[Step]`, `[Group]` 등의 텍스트 라벨을 사용할 것.
   20. **코드 포맷팅 엄수**: 불필요한 줄바꿈(Blank lines)을 과도하게 생성하지 말 것. 메서드 내에서는 논리적 블록 사이에 1줄만 띄우고, 중괄호(`{}`) 시작 전후에 불필요한 공백을 두지 않는다. 특히 들여쓰기가 깊어질 때 탭/공백이 증식되지 않도록 주의한다.
+  21. **2026-02-01 : 조건부 분기 로직 변경**: `VariableCompareCondition`은 기존의 '실패 시 중단' 방식이 아닌 **'조건 만족 시 이동(Jump on True)'** 방식으로 동작함. 엔진은 항상 `true`를 반환하며, 조건 만족 시 `GetForceJumpId`를 통해 분기함.
+  22. **2026-02-01 : 동적 타겟팅**: 프로세스 이름 및 윈도우 타이틀 설정 시 고정값뿐만 아니라 **변수(Variable)**를 사용할 수 있음. 실행 시점에 변수값이 해석되어 타겟 윈도우를 탐색함.
 --- 
 - `SGMachine_Rivet` 프로젝트 관련 정보 (생략)
 - `Riveting` 프로젝트 Viewbox 관련 요청 (생략)

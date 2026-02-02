@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Macro.Models;
 
 namespace Macro.Services
@@ -33,7 +34,7 @@ namespace Macro.Services
             foreach (var group in groups)
             {
                 // 최상위 그룹은 부모 컨텍스트가 없으므로 null, 빈 변수 스코프로 시작
-                FlattenNodeRecursive(group, result, null, new Dictionary<string, System.Windows.Point>());
+                FlattenNodeRecursive(group, result, null, new Dictionary<string, System.Windows.Point>(), new List<(string, int, string)>());
             }
 
             return result;
@@ -152,15 +153,13 @@ namespace Macro.Services
         /// <summary>
         /// 재귀적 평탄화 로직 (Core Logic)
         /// </summary>
-        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext, Dictionary<string, System.Windows.Point> scopeVariables)
+        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext, Dictionary<string, System.Windows.Point> scopeVariables, List<(string VarName, int Duration, string JumpId)> timeoutContexts)
         {
             if (node is SequenceGroup group)
             {
                 // [Scope Management]
-                // 현재 스코프 복제 (상속)
                 var currentScope = new Dictionary<string, System.Windows.Point>(scopeVariables ?? new Dictionary<string, System.Windows.Point>());
                 
-                // 현재 그룹의 변수 덮어쓰기 (Override)
                 if (group.Variables != null)
                 {
                     foreach (var v in group.Variables)
@@ -170,7 +169,6 @@ namespace Macro.Services
                 }
 
                 // [Global Variable Injection]
-                // 정수 변수는 전역 컨텍스트(EngineService)에 즉시 등록
                 if (group.IntVariables != null)
                 {
                     foreach (var iv in group.IntVariables)
@@ -179,15 +177,17 @@ namespace Macro.Services
                     }
                 }
 
-                // [Context Inheritance]
-                // ParentRelative 모드일 경우 부모 설정을 그대로 복사 (임시 객체 사용하지 않고 그룹 객체 속성을 일시적으로 변경? 
-                // -> 아니오, 그룹 객체를 변경하면 UI에 영향을 줄 수 있으므로 주의해야 함.
-                // 하지만 DashboardViewModel의 기존 로직은 group 객체를 직접 수정했음.
-                // 안전을 위해, '상속된 속성값'만 따로 관리하여 자식에게 넘기는 것이 좋으나
-                // 호환성을 위해 기존 로직(group 속성 덮어쓰기)을 유지하되, 
-                // UI 바인딩된 원본 객체가 아닌지 확인 필요.
-                // -> Dashboard는 파일에서 새로 로드한 객체를 사용하므로 수정해도 UI 영향 없음. (OK)
+                // [Timeout Logic Context Setup] (Clone list for this branch)
+                var currentTimeoutContexts = new List<(string VarName, int Duration, string JumpId)>(timeoutContexts);
                 
+                if (group.TimeoutMs > 0)
+                {
+                    string startTimeVar = $"__GroupStart_{group.Id:N}";
+                    // Add MY timeout to the list passed to children
+                    currentTimeoutContexts.Add((startTimeVar, group.TimeoutMs, group.TimeoutJumpId));
+                }
+
+                // [Context Inheritance]
                 if (group.CoordinateMode == CoordinateMode.ParentRelative && parentGroupContext != null)
                 {
                     group.CoordinateMode = parentGroupContext.CoordinateMode;
@@ -216,17 +216,29 @@ namespace Macro.Services
                         };
                         result.Add(initItem);
                     }
-                    // START 그룹은 내부 노드를 실행하지 않고 점프만 수행
                     return;
                 }
 
                 foreach (var child in group.Nodes)
                 {
-                    FlattenNodeRecursive(child, result, group, currentScope);
+                    FlattenNodeRecursive(child, result, group, currentScope, currentTimeoutContexts);
                 }
             }
             else if (node is SequenceItem item)
             {
+                // 1. Deep Clone
+                try 
+                {
+                    var options = new JsonSerializerOptions { WriteIndented = false };
+                    var json = JsonSerializer.Serialize(item, options);
+                    var clone = JsonSerializer.Deserialize<SequenceItem>(json, options);
+                    if (clone != null) item = clone;
+                }
+                catch (Exception ex)
+                {
+                    MacroEngineService.Instance.AddLog($"[Compiler] Clone failed for {item.Name}: {ex.Message}");
+                }
+
                 // [Item Context Injection]
                 if (parentGroupContext != null)
                 {
@@ -245,6 +257,61 @@ namespace Macro.Services
                 if (item.Action is MouseClickAction mouseAction)
                 {
                     mouseAction.RuntimeContextVariables = new Dictionary<string, System.Windows.Point>(scopeVariables);
+                }
+
+                // [Timeout Logic Injection]
+                
+                // A. Timer Reset Injection (Only for Start Step of a Timeout Group)
+                if (item.IsGroupStart && parentGroupContext != null && parentGroupContext.TimeoutMs > 0)
+                {
+                    string startTimeVar = $"__GroupStart_{parentGroupContext.Id:N}";
+                    var setTimeAction = new CurrentTimeAction { VariableName = startTimeVar };
+                    
+                    if (item.Action is MultiAction multi)
+                    {
+                        multi.Actions.Insert(0, setTimeAction);
+                    }
+                    else
+                    {
+                        var newMulti = new MultiAction();
+                        newMulti.Actions.Add(setTimeAction);
+                        newMulti.Actions.Add(item.Action);
+                        item.Action = newMulti;
+                    }
+                }
+
+                // B. Timeout Condition Wrapping (Layered Check)
+                // Wrap in reverse order (Inner-most first, though order doesn't strictly matter for AND logic)
+                // Actually, if Outer fails, we should jump to Outer's target.
+                // If Inner fails, jump to Inner's target.
+                // Wrapping order: 
+                // Condition = InnerCheck( Original )
+                // Condition = OuterCheck( InnerCheck( Original ) )
+                // When OuterCheck runs: if timeout -> Jump Outer. Else -> Run InnerCheck.
+                // This is correct. The last applied wrapper runs FIRST.
+                // So we should iterate the list normally?
+                // List has [Parent, Child].
+                // 1. Wrap with Parent -> Parent(Original)
+                // 2. Wrap with Child -> Child(Parent(Original))
+                // Execution: Child runs -> OK -> Parent runs -> OK -> Original runs.
+                // Wait, if Child timeout triggers, it jumps to Child Target. Parent check is skipped?
+                // Yes, CheckAsync returns false immediately.
+                // Is this desired?
+                // If Child timeout happens, we execute Child's fail jump. Correct.
+                // If Child is OK, but Parent timeout happens?
+                // Parent check runs. If fail, execute Parent's fail jump. Correct.
+                
+                // So, iterating the list naturally (Parent -> Child) means Child is the OUTERMOST wrapper.
+                // Result: ChildCheck( ParentCheck ( Original ) )
+                // Execution: Child check -> Parent Check -> Original.
+                // This seems fine.
+                
+                if (timeoutContexts != null)
+                {
+                    foreach (var ctx in timeoutContexts)
+                    {
+                        item.PreCondition = new TimeoutCheckCondition(item.PreCondition, ctx.VarName, ctx.Duration, ctx.JumpId);
+                    }
                 }
 
                 result.Add(item);

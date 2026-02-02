@@ -350,6 +350,15 @@
 - **원인**: 소스 코드 상에 포함된 이모지(📄, 📁 등)가 인코딩 호환성 문제로 인해 런타임에 올바르게 표시되지 않음 (Mojibake).
 - **해결**: 모든 이모지 문자를 `[Step]`, `[Group]`, `[External]` 등의 안전한 텍스트 라벨로 교체하여 인코딩 독립성을 확보하고 UI 가독성을 개선함.
 
+### 3.40. 그룹 타임아웃(Timeout) 기능 구현 (2026-02-02)
+- **개요**: 그룹 실행이 지정된 시간을 초과하면 강제로 그룹을 탈출하거나 특정 위치로 이동하는 안전장치 구현. 핵심 엔진(`MacroEngineService`) 수정 없이 컴파일러 레벨에서 로직을 주입하는 방식 채택.
+- **구현 방식 (Decorator Pattern)**:
+    - **모델 확장**: `SequenceGroup`에 `TimeoutMs` 및 `TimeoutJumpId` 속성 추가.
+    - **타이머 리셋 (Injection)**: 컴파일러(`RecipeCompiler`)가 평탄화 시점에 그룹의 진입점인 `Start` 스텝(`IsGroupStart`)을 찾아 `Action`을 `MultiAction`으로 변환하고, 그 앞에 현재 시간을 변수(`__GroupStart_{ID}`)에 저장하는 `CurrentTimeAction`을 자동 주입. 이를 통해 외부에서 점프해 들어오더라도 타이머가 안전하게 리셋됨.
+    - **조건 검사 (Wrapping)**: 그룹 내 모든 스텝의 `PreCondition`을 `TimeoutCheckCondition`으로 감싸서, 실행 직전에 경과 시간을 체크하고 초과 시 `TimeoutJumpId`로 점프하도록 유도.
+    - **중첩 지원 (Nested Support)**: 타임아웃 컨텍스트를 리스트(`List`)로 누적하여 전달함으로써, 자식 그룹 실행 중에도 부모 그룹의 타임아웃을 동시에 체크할 수 있도록 다중 래핑(Multi-Layer Wrapping) 구현.
+- **UI**: 그룹 설정 패널에 타임아웃 시간(ms) 및 시간 초과 시 이동할 대상을 선택하는 UI 추가.
+
 ## 4. 최종 빌드 상태
 - **결과**: `dotnet build` 성공 (Exit Code: 0)
 - **주요 해결 사항**: 

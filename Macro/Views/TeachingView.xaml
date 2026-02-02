@@ -989,6 +989,22 @@
                             <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
                         </DockPanel>
 
+                        <GroupBox Header="그룹 타임아웃 (Timeout)" Margin="0,0,0,15" Padding="10" BorderBrush="#D32F2F">
+                            <StackPanel>
+                                <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                    <TextBlock Text="제한 시간:" VerticalAlignment="Center" Width="110"/>
+                                    <TextBox Text="{Binding TimeoutMs, UpdateSourceTrigger=PropertyChanged}" Width="60" DockPanel.Dock="Left"/>
+                                    <TextBlock Text="ms (0 = 무제한)" VerticalAlignment="Center" Margin="5,0,0,0" Foreground="Gray"/>
+                                </DockPanel>
+                                <DockPanel LastChildFill="True">
+                                    <TextBlock Text="시간 초과 시 이동:" VerticalAlignment="Center" Width="110" Foreground="#D32F2F"/>
+                                    <components:JumpTargetSelector ItemsSource="{Binding DataContext.AvailableGroupExitTargets, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                  SelectedId="{Binding TimeoutJumpId, Mode=TwoWay}"
+                                                                  ToolTip="제한 시간을 초과했을 때 이동할 스텝/그룹"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="그룹 흐름 제어 (Flow Control)" Margin="0,0,0,15" Padding="10" BorderBrush="#FF9800">
                             <StackPanel>
                                 <DockPanel LastChildFill="True" Margin="0,0,0,5">

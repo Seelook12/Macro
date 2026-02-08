@@ -11,7 +11,7 @@
         Title="RegionPickerWindow">
     <Grid>
         <!-- 배경 이미지 -->
-        <Image x:Name="CaptureImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+        <Image x:Name="CaptureImage" Stretch="Fill"/>
         
         <!-- 반투명 오버레이 (선택되지 않은 영역을 어둡게) - 복잡하므로 단순 사각형만 표시 -->
         <Canvas x:Name="OverlayCanvas">

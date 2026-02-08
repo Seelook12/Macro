@@ -81,6 +81,10 @@ namespace Macro.Models
     {
         private int _delayTimeMs;
         private string _failJumpName = string.Empty;
+        
+        // Runtime Tracking
+        private DateTime? _startTime;
+        public DateTime? StartTime => _startTime; // Exposed for Engine
 
         public System.Windows.Point? FoundPoint => null;
 
@@ -106,8 +110,16 @@ namespace Macro.Models
 
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
-            await Task.Delay(DelayTimeMs, token);
-            return true;
+            _startTime = DateTime.Now;
+            try
+            {
+                await Task.Delay(DelayTimeMs, token);
+                return true;
+            }
+            finally
+            {
+                _startTime = null; // Reset after finish
+            }
         }
     }
 
@@ -280,15 +292,15 @@ namespace Macro.Models
                     {
                         // 1. 현재 화면 캡처 및 영역 정보 획득
                         MacroEngineService.Instance.AddLog($"[Debug] 캡처 시작 ({i + 1}/{attempts})");
-                        
+
                         var bmp = ScreenCaptureHelper.GetScreenCapture();
                         var bounds = ScreenCaptureHelper.GetScreenBounds();
                         bmp?.Freeze();
                         captureImage = bmp;
-                        
+
                         var captureData = new { Image = bmp, Bounds = bounds };
 
-                        if (captureData?.Image == null) 
+                        if (captureData?.Image == null)
                         {
                             MacroEngineService.Instance.AddLog($"[Debug] 캡처 실패 (Image is null)");
                             return false;
@@ -320,24 +332,27 @@ namespace Macro.Models
                             double rw = RegionW * _scaleX;
                             double rh = RegionH * _scaleY;
                             roi = new System.Windows.Rect(rx, ry, rw, rh);
-                            
+
                             MacroEngineService.Instance.AddLog($"[Debug] ROI (User): {roi}, Scale: {_scaleX:F2}x{_scaleY:F2}, Offset: {_offsetX},{_offsetY}");
                         }
                         else if (_contextWidth > 0 && _contextHeight > 0)
                         {
+                            // Auto ROI: Window Context 영역 사용
+                            // _offsetX, _offsetY는 현재 윈도우 클라이언트 영역의 스크린 절대 좌표
+                            // _contextWidth, _contextHeight는 현재 윈도우 클라이언트 크기
                             double rx = _offsetX - captureData.Bounds.Left;
                             double ry = _offsetY - captureData.Bounds.Top;
                             double rw = _contextWidth;
                             double rh = _contextHeight;
-                            roi = new System.Windows.Rect(rx, ry, rw, rh);
 
-                            MacroEngineService.Instance.AddLog($"[Debug] ROI (Auto-Window): {roi}, Context: {_contextWidth}x{_contextHeight}, Scale: {_scaleX:F2}x{_scaleY:F2}");
+                            roi = new System.Windows.Rect(rx, ry, rw, rh);
+                            MacroEngineService.Instance.AddLog($"[Debug] ROI (Auto Window): {roi}");
                         }
                         else
                         {
                             MacroEngineService.Instance.AddLog($"[Debug] 전체 화면 검색, Scale: {_scaleX:F2}x{_scaleY:F2}, Offset: {_offsetX},{_offsetY}");
                         }
-                        
+
                         currentRoi = roi;
 
                         if (token.IsCancellationRequested) return false;
@@ -350,9 +365,9 @@ namespace Macro.Models
                         {
                             // 이미지 로컬 좌표 -> 스크린 절대 좌표 변환
                             _foundPoint = new System.Windows.Point(
-                                result.Point.Value.X + captureData.Bounds.Left, 
+                                result.Point.Value.X + captureData.Bounds.Left,
                                 result.Point.Value.Y + captureData.Bounds.Top);
-                            
+
                             if (!string.IsNullOrEmpty(ResultVariableName))
                             {
                                 MacroEngineService.Instance.UpdateVariable(ResultVariableName, "True");
@@ -865,21 +880,37 @@ namespace Macro.Models
         }
     }
 
-    public class TimeoutCheckCondition : ReactiveObject, IMacroCondition
+    public class TimeoutCheckCondition : ReactiveObject, IMacroCondition, ISupportCoordinateTransform
     {
         private IMacroCondition? _inner;
+        public IMacroCondition? Inner => _inner;
+
         private string _startTimeVariableName;
         private int _timeoutMs;
         private string _timeoutJumpId;
+        private string _groupName; // Added for UI display
         private string _failJumpName = string.Empty;
         private string _failJumpId = string.Empty;
 
-        public TimeoutCheckCondition(IMacroCondition? inner, string startTimeVar, int timeoutMs, string timeoutJumpId)
+        public string GroupName => _groupName;
+        public int TimeoutMs => _timeoutMs;
+        public string StartTimeVariableName => _startTimeVariableName;
+
+        public TimeoutCheckCondition(IMacroCondition? inner, string groupName, string startTimeVar, int timeoutMs, string timeoutJumpId)
         {
             _inner = inner;
+            _groupName = groupName;
             _startTimeVariableName = startTimeVar;
             _timeoutMs = timeoutMs;
             _timeoutJumpId = timeoutJumpId;
+        }
+
+        public void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY)
+        {
+            if (_inner is ISupportCoordinateTransform transform)
+            {
+                transform.SetTransform(scaleX, scaleY, offsetX, offsetY);
+            }
         }
 
         public System.Windows.Point? FoundPoint => _inner?.FoundPoint;
@@ -907,10 +938,20 @@ namespace Macro.Models
                 {
                     MacroEngineService.Instance.AddLog($"[Timeout] Group timeout exceeded ({elapsed:F0}ms > {_timeoutMs}ms). Jumping to fallback.");
                     
+                    // [Fix] Reset timer on timeout. 
+                    // This ensures that if the FailJump leads back to this group (Retry/Loop), 
+                    // we start with a fresh timer instead of immediately timing out again (Infinite Loop).
+                    MacroEngineService.Instance.UpdateVariable(_startTimeVariableName, DateTime.Now.Ticks.ToString());
+
                     // Force jump to timeout target
                     FailJumpId = _timeoutJumpId; 
                     return false; 
                 }
+            }
+            else
+            {
+                // [Lazy Init] If variable is missing (first run or jumped in without Start step), initialize it.
+                MacroEngineService.Instance.UpdateVariable(_startTimeVariableName, DateTime.Now.Ticks.ToString());
             }
 
             // 2. Inner Condition Check
@@ -2008,4 +2049,15 @@ namespace Macro.Models
     }
 
     #endregion
+
+    public class TimeoutStatus
+    {
+        public string GroupName { get; set; } = string.Empty;
+        public string StepName { get; set; } = string.Empty; // Added
+        public double ElapsedMs { get; set; }
+        public double TotalMs { get; set; }
+        public double RemainingMs { get; set; }
+        public double Progress { get; set; } // 0.0 to 1.0
+        public bool IsExpired { get; set; }
+    }
 }

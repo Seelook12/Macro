@@ -113,7 +113,65 @@ namespace Macro.Services
             private set => RxApp.MainThreadScheduler.Schedule(() => this.RaiseAndSetIfChanged(ref _totalStepCount, value));
         }
 
+        public enum ExecutionPhase
+        {
+            None,
+            PreCondition,
+            Action,
+            PostCondition
+        }
+
+        private ExecutionPhase _currentPhase = ExecutionPhase.None;
+        public ExecutionPhase CurrentPhase
+        {
+            get => _currentPhase;
+            private set => RxApp.MainThreadScheduler.Schedule(() => this.RaiseAndSetIfChanged(ref _currentPhase, value));
+        }
+
+        private SequenceItem? _currentSequenceItem;
+        public SequenceItem? CurrentSequenceItem => _currentSequenceItem; // Expose for ViewModel
+
         // Methods
+        public List<TimeoutStatus> GetActiveTimeouts()
+        {
+            var results = new List<TimeoutStatus>();
+            if (_currentSequenceItem == null || !IsRunning) return results;
+
+            // 1. Traverse PreCondition Wrappers (Group Timeouts)
+            var current = _currentSequenceItem.PreCondition;
+            while (current != null)
+            {
+                if (current is TimeoutCheckCondition timeout)
+                {
+                    if (Variables.TryGetValue(timeout.StartTimeVariableName, out var tickStr) && long.TryParse(tickStr, out var startTicks))
+                    {
+                        var elapsedMs = TimeSpan.FromTicks(DateTime.Now.Ticks - startTicks).TotalMilliseconds;
+                        var remainingMs = timeout.TimeoutMs - elapsedMs;
+                        var progress = Math.Clamp(elapsedMs / timeout.TimeoutMs, 0.0, 1.0);
+
+                        results.Add(new TimeoutStatus
+                        {
+                            GroupName = timeout.GroupName,
+                            StepName = _currentSequenceItem.Name,
+                            TotalMs = timeout.TimeoutMs,
+                            ElapsedMs = elapsedMs,
+                            RemainingMs = remainingMs,
+                            Progress = progress,
+                            IsExpired = remainingMs <= 0
+                        });
+                    }
+                    current = timeout.Inner;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            // Note: DelayCondition tracking removed from here as per user request.
+            
+            return results;
+        }
+
         public async Task RunAsync(IEnumerable<SequenceItem> sequences)
         {
             if (IsRunning)
@@ -127,6 +185,7 @@ namespace Macro.Services
             var token = _cts.Token;
 
             Variables.Clear();
+            ImageSearchService.ClearCache(); // [Fix] Clear image cache before execution to ensure fresh template loading
 
             // Load Variable Defaults from .vars.json
             var currentRecipe = RecipeManager.Instance.CurrentRecipe;
@@ -183,6 +242,7 @@ namespace Macro.Services
                         if (token.IsCancellationRequested) break;
 
                         var item = sequenceList[currentIndex];
+                        _currentSequenceItem = item;
                         int stepIndex = currentIndex + 1;
                         
                         CurrentStepIndex = stepIndex;
@@ -252,6 +312,7 @@ namespace Macro.Services
                                     // 1. PreCondition
                                     if (item.PreCondition != null)
                                                             {
+                                                                CurrentPhase = ExecutionPhase.PreCondition;
                                                                 AddLog($"    - 조건 확인 중: {GetTypeName(item.PreCondition)} (시도 {retryAttempt + 1})");
                                                                 bool check = await item.PreCondition.CheckAsync(token);
                                                                 if (!check)
@@ -282,31 +343,6 @@ namespace Macro.Services
 
                                         if (captureData?.Image != null)
                                         {
-                                            // 절대 좌표를 이미지 로컬 좌표로 변환
-                                            // gcc는 이미 ConfigureRelativeCoordinates에 의해 Transform이 설정된 상태임.
-                                            // 하지만 여기서는 프로퍼티(X, Y) 접근 시 자동으로 계산되지 않으므로 수동 계산 필요할 수 있으나,
-                                            // GrayChangeCondition은 ISupportCoordinateTransform을 구현하며 이미 스케일이 적용된 상태가 아님.
-                                            // 아, ConfigureRelativeCoordinates는 gcc의 private 필드(_scaleX 등)를 설정함.
-                                            // gcc.X는 원본 좌표임.
-                                            // 따라서 gcc 내부 로직과 유사하게 계산해야 함.
-                                            
-                                            // 하지만 private 필드에 접근할 수 없으므로...
-                                            // 잠깐, gcc 객체 자체는 모델이고 SetTransform으로 스케일이 주입됨.
-                                            // 그러나 외부에서 계산하려면 public 메서드나 속성이 필요함.
-                                            // 가장 좋은 방법: GrayChangeCondition에 'MeasureCurrentValue(capture, bounds)' 메서드를 추가하는 것.
-                                            // 하지만 인터페이스 변경이 부담스러우니, 여기서 Reflection이나 유사 로직을 써야 하나?
-                                            // 아니, GrayChangeCondition은 모델 클래스이므로 로직을 캡슐화하는 게 맞음.
-                                            // GetCurrentValue(BitmapSource, bounds) 메서드를 추가하자.
-                                            
-                                            // 임시 방편: gcc의 private 필드를 읽을 수 없으니...
-                                            // 아니, gcc는 이미 _scaleX 등이 세팅되어 있음.
-                                            // 외부에서 계산하려면 gcc의 X, Y, Width, Height만 알면 안 되고 _scaleX도 알아야 함.
-                                            // GrayChangeCondition에 `Measure(BitmapSource, bounds)` 메서드를 추가하는 게 정석임.
-                                            
-                                            // 일단 여기서는 기존 로직대로 하되, _scaleX 등에 접근할 수 없다는 문제를 해결해야 함.
-                                            // 아, `ImageSearchService.GetGrayAverage` 호출 시 좌표를 넘겨야 하는데...
-                                            // gcc 내부 필드를 못 읽음.
-                                            
                                             // 해결책: GrayChangeCondition에 `UpdateReferenceValue(capture, bounds)` 메서드 추가.
                                             gcc.UpdateReferenceValue(captureData.Image, captureData.Bounds);
                                             
@@ -316,6 +352,7 @@ namespace Macro.Services
                         
                                     // 2. Action 실행
                                     if (token.IsCancellationRequested) break;
+                                    CurrentPhase = ExecutionPhase.Action;
                                     AddLog($"    - 동작 실행 중: {GetTypeName(item.Action)}");
                                     try
                                     {
@@ -330,6 +367,7 @@ namespace Macro.Services
                                     if (item.PostCondition != null)
                                     {
                                         if (token.IsCancellationRequested) break;
+                                        CurrentPhase = ExecutionPhase.PostCondition;
                                         AddLog($"    - 결과 확인 중: {GetTypeName(item.PostCondition)}");
                                         bool check = await item.PostCondition.CheckAsync(token);
                                         if (!check)
@@ -445,6 +483,13 @@ namespace Macro.Services
                                 jumpTargetName = null;
                                 jumpTargetId = null;
                             }
+                        }
+
+                        // Special Handling for Stop Execution
+                        if (jumpTargetId == "(Stop Execution)" || jumpTargetName == "(Stop Execution)")
+                        {
+                            AddLog($"    -> 중지 설정됨: 실행을 중단합니다.");
+                            break;
                         }
 
                         // ID 또는 이름 기반 점프 처리 (위에서 currentIndex가 변경되지 않은 경우)
@@ -788,7 +833,15 @@ namespace Macro.Services
             if (item.PreCondition is ISupportCoordinateTransform pre) 
             {
                 pre.SetTransform(scaleX, scaleY, pt.X, pt.Y);
-                if (pre is ImageMatchCondition imgPre) imgPre.SetContextSize(clientRect.Width, clientRect.Height);
+                
+                // [Fix] Handle wrapped conditions (TimeoutCheckCondition) for SetContextSize
+                var current = item.PreCondition;
+                while (current != null)
+                {
+                    if (current is ImageMatchCondition img) { img.SetContextSize(clientRect.Width, clientRect.Height); break; }
+                    if (current is TimeoutCheckCondition timeout) current = timeout.Inner;
+                    else break;
+                }
             }
             
             if (item.Action is ISupportCoordinateTransform act) 
@@ -799,7 +852,15 @@ namespace Macro.Services
             if (item.PostCondition is ISupportCoordinateTransform post) 
             {
                 post.SetTransform(scaleX, scaleY, pt.X, pt.Y);
-                if (post is ImageMatchCondition imgPost) imgPost.SetContextSize(clientRect.Width, clientRect.Height);
+                
+                // [Fix] Handle wrapped conditions
+                var current = item.PostCondition;
+                while (current != null)
+                {
+                    if (current is ImageMatchCondition img) { img.SetContextSize(clientRect.Width, clientRect.Height); break; }
+                    if (current is TimeoutCheckCondition timeout) current = timeout.Inner;
+                    else break;
+                }
             }
         }
     }

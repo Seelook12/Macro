@@ -14,7 +14,7 @@
         Title="CoordinatePickerWindow">
     <Grid Background="Black">
         <!-- 캡처된 이미지를 1:1로 표시 -->
-        <Image x:Name="CaptureImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+        <Image x:Name="CaptureImage" Stretch="Fill"/>
         
         <!-- 안내 텍스트 -->
         <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,50,0,0" 

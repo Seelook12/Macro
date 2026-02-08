@@ -269,6 +269,7 @@ namespace Macro.ViewModels
             CaptureImageCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(CaptureImageAsync);
             UpdateRefSizeCommand = ReactiveCommand.Create<object>(UpdateCurrentGroupReferenceSize);
             TestImageConditionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(TestImageConditionAsync);
+            PickRegionCommand = ReactiveCommand.CreateFromTask<object>(PickRegion);
         }
 
         #region Command Handlers
@@ -525,7 +526,7 @@ namespace Macro.ViewModels
             }
         }
 
-        private void PickRegion(object condition)
+        private async Task PickRegion(object condition)
         {
              // RegionPicker interaction logic is handled in View via CommandBinding usually, 
              // but here we use Interaction pattern.
@@ -533,7 +534,7 @@ namespace Macro.ViewModels
              // Wait, the original code used CommandParameter and a generic interaction.
              // Let's implement the async handler here.
              
-             PickRegionAsync(condition).ConfigureAwait(false);
+             await PickRegionAsync(condition);
         }
 
         private async Task PickRegionAsync(object condition)
@@ -544,18 +545,32 @@ namespace Macro.ViewModels
                 var r = rect.Value;
                 
                 // Common scaling logic
-                var parentGroup = SelectedGroup != null ? ResolveGroupContext(SelectedGroup) : (SelectedSequence != null ? GetEffectiveGroupContext(SelectedSequence) : null);
+                var parentGroup = SelectedGroup ?? (SelectedSequence != null ? FindParentGroup(SelectedSequence) : null);
+                // Resolve the effective context group (handle ParentRelative)
+                var contextGroup = ResolveGroupContext(parentGroup);
+
                 double winX = 0, winY = 0;
                 
-                if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
+                if (contextGroup != null && contextGroup.CoordinateMode == CoordinateMode.WindowRelative)
                 {
-                     var winInfo = GetTargetWindowInfo(parentGroup);
+                     var winInfo = GetTargetWindowInfo(contextGroup);
                      if (winInfo.HasValue)
                      {
-                         parentGroup.RefWindowWidth = winInfo.Value.Width;
-                         parentGroup.RefWindowHeight = winInfo.Value.Height;
+                         contextGroup.RefWindowWidth = winInfo.Value.Width;
+                         contextGroup.RefWindowHeight = winInfo.Value.Height;
                          winX = winInfo.Value.X;
                          winY = winInfo.Value.Y;
+                         System.Diagnostics.Debug.WriteLine($"[PickRegion] Window Found: '{contextGroup.TargetProcessName}' at ({winX},{winY})");
+                     }
+                     else
+                     {
+                         System.Diagnostics.Debug.WriteLine($"[PickRegion] Warning: Target Window '{contextGroup.TargetProcessName}' not found!");
+                         RxApp.MainThreadScheduler.Schedule(() => 
+                         {
+                             System.Windows.MessageBox.Show(
+                                 $"Target Window '{contextGroup.TargetProcessName}' not found.\nRegion will be calculated as Absolute (0,0).\n\nPlease ensure the target application is running and the name is correct.", 
+                                 "Window Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                         });
                      }
                 }
 
@@ -566,6 +581,7 @@ namespace Macro.ViewModels
                     img.RegionY = (int)(r.Y - winY);
                     img.RegionW = (int)r.Width;
                     img.RegionH = (int)r.Height;
+                    System.Diagnostics.Debug.WriteLine($"[PickRegion] Picked: {r}, Relative: {img.RegionX},{img.RegionY}");
                 }
                 else if (condition is GrayChangeCondition gray)
                 {
@@ -573,6 +589,7 @@ namespace Macro.ViewModels
                     gray.Y = (int)(r.Y - winY);
                     gray.Width = (int)r.Width;
                     gray.Height = (int)r.Height;
+                    System.Diagnostics.Debug.WriteLine($"[PickRegion] Picked Gray: {r}, Relative: {gray.X},{gray.Y}");
                 }
             }
         }

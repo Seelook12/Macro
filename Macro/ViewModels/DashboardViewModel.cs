@@ -50,11 +50,62 @@ namespace Macro.ViewModels
         private readonly ObservableAsPropertyHelper<int> _totalStepCount;
         public int TotalStepCount => _totalStepCount.Value;
 
+        private ObservableCollection<TimeoutStatus> _activeTimeouts = new ObservableCollection<TimeoutStatus>();
+        public ObservableCollection<TimeoutStatus> ActiveTimeouts
+        {
+            get => _activeTimeouts;
+            set => this.RaiseAndSetIfChanged(ref _activeTimeouts, value);
+        }
+        
+        // Detailed Step Status Properties
+        private string _preConditionStatus = "대기";
+        public string PreConditionStatus
+        {
+            get => _preConditionStatus;
+            set => this.RaiseAndSetIfChanged(ref _preConditionStatus, value);
+        }
+
+        private string _actionStatus = "대기";
+        public string ActionStatus
+        {
+            get => _actionStatus;
+            set => this.RaiseAndSetIfChanged(ref _actionStatus, value);
+        }
+
+        private string _postConditionStatus = "대기";
+        public string PostConditionStatus
+        {
+            get => _postConditionStatus;
+            set => this.RaiseAndSetIfChanged(ref _postConditionStatus, value);
+        }
 
         public DashboardViewModel(IScreen screen)
         {
             HostScreen = screen;
             _engineService = MacroEngineService.Instance;
+
+            // Timer for Active Timeouts & Step Status Update (100ms for smoother delay timer)
+            Observable.Interval(TimeSpan.FromMilliseconds(100))
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(_ =>
+                {
+                    if (IsRunning)
+                    {
+                        // 1. Update Timeouts
+                        var statusList = _engineService.GetActiveTimeouts();
+                        ActiveTimeouts = new ObservableCollection<TimeoutStatus>(statusList);
+
+                        // 2. Update Step Status
+                        UpdateStepStatus();
+                    }
+                    else
+                    {
+                        if (ActiveTimeouts.Count > 0) ActiveTimeouts.Clear();
+                        PreConditionStatus = "대기";
+                        ActionStatus = "대기";
+                        PostConditionStatus = "대기";
+                    }
+                });
 
             // IsRunning 상태 동기화
             _isRunning = _engineService
@@ -198,6 +249,53 @@ namespace Macro.ViewModels
             }, canStop);
         }
 
+        private void UpdateStepStatus()
+        {
+            var item = _engineService.CurrentSequenceItem;
+            var phase = _engineService.CurrentPhase;
 
+            if (item == null) return;
+
+            PreConditionStatus = GetComponentStatus(item.PreCondition, phase, MacroEngineService.ExecutionPhase.PreCondition, "조건 확인");
+            ActionStatus = GetComponentStatus(item.Action, phase, MacroEngineService.ExecutionPhase.Action, "동작 실행");
+            PostConditionStatus = GetComponentStatus(item.PostCondition, phase, MacroEngineService.ExecutionPhase.PostCondition, "완료 확인");
+        }
+
+        private string GetComponentStatus(object? component, MacroEngineService.ExecutionPhase currentPhase, MacroEngineService.ExecutionPhase targetPhase, string defaultLabel)
+        {
+            if (component == null) return "-";
+
+            // Determine execution state relative to current phase
+            bool isPast = currentPhase > targetPhase;
+            bool isCurrent = currentPhase == targetPhase;
+
+            // Type Check
+            string typeName = component.GetType().Name.Replace("Condition", "").Replace("Action", "");
+            
+            // Special Handling for Delay
+            if (component is DelayCondition delay)
+            {
+                if (isCurrent && delay.StartTime.HasValue)
+                {
+                    var elapsed = (DateTime.Now - delay.StartTime.Value).TotalMilliseconds;
+                    var remaining = Math.Max(0, delay.DelayTimeMs - elapsed);
+                    return $"{typeName}: {elapsed/1000.0:F1}s / {delay.DelayTimeMs/1000.0:F1}s";
+                }
+                else if (isPast)
+                {
+                     return $"{typeName}: 완료";
+                }
+                else
+                {
+                     return $"{typeName}: 대기";
+                }
+            }
+
+            // General Handling
+            if (isCurrent) return $"{typeName}: 진행 중...";
+            if (isPast) return $"{typeName}: 완료";
+            
+            return $"{typeName}: 대기";
+        }
     }
 }

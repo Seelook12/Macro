@@ -34,7 +34,7 @@ namespace Macro.Services
             foreach (var group in groups)
             {
                 // 최상위 그룹은 부모 컨텍스트가 없으므로 null, 빈 변수 스코프로 시작
-                FlattenNodeRecursive(group, result, null, new Dictionary<string, System.Windows.Point>(), new List<(string, int, string)>());
+                FlattenNodeRecursive(group, result, null, new Dictionary<string, System.Windows.Point>(), new List<(string, string, int, string)>());
             }
 
             return result;
@@ -153,7 +153,7 @@ namespace Macro.Services
         /// <summary>
         /// 재귀적 평탄화 로직 (Core Logic)
         /// </summary>
-        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext, Dictionary<string, System.Windows.Point> scopeVariables, List<(string VarName, int Duration, string JumpId)> timeoutContexts)
+        private void FlattenNodeRecursive(ISequenceTreeNode node, List<SequenceItem> result, SequenceGroup? parentGroupContext, Dictionary<string, System.Windows.Point> scopeVariables, List<(string GroupName, string VarName, int Duration, string JumpId)> timeoutContexts)
         {
             if (node is SequenceGroup group)
             {
@@ -178,31 +178,47 @@ namespace Macro.Services
                 }
 
                 // [Timeout Logic Context Setup] (Clone list for this branch)
-                var currentTimeoutContexts = new List<(string VarName, int Duration, string JumpId)>(timeoutContexts);
+                var currentTimeoutContexts = new List<(string GroupName, string VarName, int Duration, string JumpId)>(timeoutContexts);
                 
                 if (group.TimeoutMs > 0)
                 {
                     string startTimeVar = $"__GroupStart_{group.Id:N}";
                     // Add MY timeout to the list passed to children
-                    currentTimeoutContexts.Add((startTimeVar, group.TimeoutMs, group.TimeoutJumpId));
+                    currentTimeoutContexts.Add((group.Name, startTimeVar, group.TimeoutMs, group.TimeoutJumpId));
                 }
 
-                // [Context Inheritance]
+                // [Context Inheritance] - Non-destructive
+                SequenceGroup effectiveContext = group;
+
                 if (group.CoordinateMode == CoordinateMode.ParentRelative && parentGroupContext != null)
                 {
-                    group.CoordinateMode = parentGroupContext.CoordinateMode;
-                    group.ContextSearchMethod = parentGroupContext.ContextSearchMethod;
-                    group.TargetProcessName = parentGroupContext.TargetProcessName;
-                    group.TargetNameSource = parentGroupContext.TargetNameSource;
-                    group.TargetProcessNameVariable = parentGroupContext.TargetProcessNameVariable;
-                    group.ContextWindowState = parentGroupContext.ContextWindowState;
-                    group.ProcessNotFoundJumpName = parentGroupContext.ProcessNotFoundJumpName;
-                    group.ProcessNotFoundJumpId = parentGroupContext.ProcessNotFoundJumpId;
-                    group.RefWindowWidth = parentGroupContext.RefWindowWidth;
-                    group.RefWindowHeight = parentGroupContext.RefWindowHeight;
+                    // Create a transient group to hold inherited settings without mutating the original model
+                    effectiveContext = new SequenceGroup
+                    {
+                        // Identity
+                        Name = group.Name,
+                        // Id is get-only, generated new but that's fine for context purposes
+                        
+                        // Inherited Settings
+                        CoordinateMode = parentGroupContext.CoordinateMode,
+                        ContextSearchMethod = parentGroupContext.ContextSearchMethod,
+                        TargetProcessName = parentGroupContext.TargetProcessName,
+                        TargetNameSource = parentGroupContext.TargetNameSource,
+                        TargetProcessNameVariable = parentGroupContext.TargetProcessNameVariable,
+                        ContextWindowState = parentGroupContext.ContextWindowState,
+                        ProcessNotFoundJumpName = parentGroupContext.ProcessNotFoundJumpName,
+                        ProcessNotFoundJumpId = parentGroupContext.ProcessNotFoundJumpId,
+                        RefWindowWidth = parentGroupContext.RefWindowWidth,
+                        RefWindowHeight = parentGroupContext.RefWindowHeight,
+                        
+                        // Keep Own Properties
+                        PostCondition = group.PostCondition,
+                        TimeoutMs = group.TimeoutMs,
+                        TimeoutJumpId = group.TimeoutJumpId
+                    };
                 }
                 
-                MacroEngineService.Instance.AddLog($"[Compiler] Group: {group.Name}, Mode: {group.CoordinateMode}, RefW: {group.RefWindowWidth}");
+                MacroEngineService.Instance.AddLog($"[Compiler] Group: {group.Name}, Mode: {group.CoordinateMode} (Effective: {effectiveContext.CoordinateMode}), RefW: {effectiveContext.RefWindowWidth}");
 
                 // [Entry Point Handling]
                 if (group.IsStartGroup)
@@ -221,7 +237,7 @@ namespace Macro.Services
 
                 foreach (var child in group.Nodes)
                 {
-                    FlattenNodeRecursive(child, result, group, currentScope, currentTimeoutContexts);
+                    FlattenNodeRecursive(child, result, effectiveContext, currentScope, currentTimeoutContexts);
                 }
             }
             else if (node is SequenceItem item)
@@ -264,19 +280,30 @@ namespace Macro.Services
                 // A. Timer Reset Injection (Only for Start Step of a Timeout Group)
                 if (item.IsGroupStart && parentGroupContext != null && parentGroupContext.TimeoutMs > 0)
                 {
-                    string startTimeVar = $"__GroupStart_{parentGroupContext.Id:N}";
-                    var setTimeAction = new CurrentTimeAction { VariableName = startTimeVar };
-                    
-                    if (item.Action is MultiAction multi)
+                    // [Fix] Use VarName from timeoutContexts logic instead of parentGroupContext.Id
+                    // because parentGroupContext might be a transient clone (EffectiveContext) with a different ID.
+                    // The last added timeout context corresponds to the immediate parent group.
+                    string startTimeVar = string.Empty;
+                    if (timeoutContexts != null && timeoutContexts.Count > 0)
                     {
-                        multi.Actions.Insert(0, setTimeAction);
+                        startTimeVar = timeoutContexts[timeoutContexts.Count - 1].VarName;
                     }
-                    else
+
+                    if (!string.IsNullOrEmpty(startTimeVar))
                     {
-                        var newMulti = new MultiAction();
-                        newMulti.Actions.Add(setTimeAction);
-                        newMulti.Actions.Add(item.Action);
-                        item.Action = newMulti;
+                        var setTimeAction = new CurrentTimeAction { VariableName = startTimeVar };
+                        
+                        if (item.Action is MultiAction multi)
+                        {
+                            multi.Actions.Insert(0, setTimeAction);
+                        }
+                        else
+                        {
+                            var newMulti = new MultiAction();
+                            newMulti.Actions.Add(setTimeAction);
+                            newMulti.Actions.Add(item.Action);
+                            item.Action = newMulti;
+                        }
                     }
                 }
 
@@ -308,9 +335,19 @@ namespace Macro.Services
                 
                 if (timeoutContexts != null)
                 {
-                    foreach (var ctx in timeoutContexts)
+                    // [Fix] Start Step의 딜레마 해결
+                    // 그룹의 Start 스텝은 액션에서 타이머를 리셋해야 하므로, 
+                    // 자기 자신(현재 그룹)의 타임아웃 검사는 건너뛰고 부모들의 타임아웃만 검사해야 함.
+                    int count = timeoutContexts.Count;
+                    if (item.IsGroupStart && count > 0)
                     {
-                        item.PreCondition = new TimeoutCheckCondition(item.PreCondition, ctx.VarName, ctx.Duration, ctx.JumpId);
+                        count--; // 마지막(현재 그룹) 컨텍스트 제외
+                    }
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        var ctx = timeoutContexts[i];
+                        item.PreCondition = new TimeoutCheckCondition(item.PreCondition, ctx.GroupName, ctx.VarName, ctx.Duration, ctx.JumpId);
                     }
                 }
 

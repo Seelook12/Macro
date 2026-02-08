@@ -64,6 +64,10 @@ namespace Macro.ViewModels
                 {
                     forceIds.Add(SelectedGroup.PostCondition.FailJumpId);
                 }
+                if (!string.IsNullOrEmpty(SelectedGroup.TimeoutJumpId))
+                {
+                    forceIds.Add(SelectedGroup.TimeoutJumpId);
+                }
 
                 // [BugFix] Also Include IDs from the Previous Group (oldGroup) to prevent binding loss (null) during View transition
                 if (oldGroup != null)
@@ -86,6 +90,11 @@ namespace Macro.ViewModels
                     if (oldGroup.PostCondition != null && !string.IsNullOrEmpty(oldGroup.PostCondition.FailJumpId))
                     {
                         forceIds.Add(oldGroup.PostCondition.FailJumpId);
+                    }
+
+                    if (!string.IsNullOrEmpty(oldGroup.TimeoutJumpId))
+                    {
+                        forceIds.Add(oldGroup.TimeoutJumpId);
                     }
                 }
 
@@ -117,6 +126,9 @@ namespace Macro.ViewModels
 
                 // [Sync] Group PostCondition FailJumpId
                 _selectedGroupPostConditionFailJumpId = SelectedGroup.PostCondition?.FailJumpId ?? string.Empty;
+                
+                // [Sync] Group TimeoutJumpId
+                _selectedGroupTimeoutJumpId = SelectedGroup.TimeoutJumpId ?? string.Empty;
 
                 // [Sync] Group PostCondition VariableName
                 if (SelectedGroup.PostCondition is VariableCompareCondition vcc) _selectedGroupPostConditionVariableName = vcc.VariableName;
@@ -131,6 +143,7 @@ namespace Macro.ViewModels
                 _selectedGroupEntryJumpId = string.Empty;
                 _selectedGroupExitJumpId = string.Empty;
                 _selectedGroupPostConditionFailJumpId = string.Empty;
+                _selectedGroupTimeoutJumpId = string.Empty;
                 _selectedGroupPostConditionVariableName = string.Empty;
                 GroupPostConditionCases.Clear();
             }
@@ -138,6 +151,7 @@ namespace Macro.ViewModels
             this.RaisePropertyChanged(nameof(SelectedGroupEntryJumpId));
             this.RaisePropertyChanged(nameof(SelectedGroupExitJumpId));
             this.RaisePropertyChanged(nameof(SelectedGroupPostConditionFailJumpId));
+            this.RaisePropertyChanged(nameof(SelectedGroupTimeoutJumpId));
             this.RaisePropertyChanged(nameof(SelectedGroupPostConditionVariableName));
         }
 
@@ -874,8 +888,28 @@ namespace Macro.ViewModels
 
         private WindowInfo? GetTargetWindowInfo(SequenceGroup group)
         {
-            string targetName = group.TargetProcessName;
+            string targetName = string.Empty;
+
+            // [Fix] Support Variable Source for Teaching Context
+            if (group.TargetNameSource == ProcessNameSource.Variable)
+            {
+                if (!string.IsNullOrEmpty(group.TargetProcessNameVariable))
+                {
+                    // Try to find default value from DefinedVariables
+                    var defVar = DefinedVariables.FirstOrDefault(v => v.Name == group.TargetProcessNameVariable);
+                    if (defVar != null)
+                    {
+                        targetName = defVar.DefaultValue;
+                    }
+                }
+            }
+            else
+            {
+                targetName = group.TargetProcessName;
+            }
+
             if (string.IsNullOrEmpty(targetName)) return null;
+
             IntPtr hWnd = IntPtr.Zero;
             if (group.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
             {
@@ -895,9 +929,171 @@ namespace Macro.ViewModels
         private async Task TestImageConditionAsync(ImageMatchCondition condition)
         {
             if (condition == null) return;
-            var result = await condition.CheckAsync(System.Threading.CancellationToken.None);
-            if (condition.DebugImage != null) TestResultImage = condition.DebugImage;
-            System.Windows.MessageBox.Show(result ? "Success" : "Failed");
+
+            try
+            {
+                condition.TestResult = "Searching...";
+                TestResultImage = null;
+
+                // [Fix] Resolve effective context recursively (Handle ParentRelative)
+                var contextSource = SelectedGroup ?? (SelectedSequence != null ? FindParentGroup(SelectedSequence) : null);
+                var parentGroup = ResolveGroupContext(contextSource);
+
+                await Task.Run(() =>
+                {
+                    var captureSource = ScreenCaptureHelper.GetScreenCapture();
+                    var bounds = ScreenCaptureHelper.GetScreenBounds();
+
+                    if (captureSource == null)
+                    {
+                        condition.TestResult = "Capture Failed";
+                        return;
+                    }
+
+                    double scaleX = 1.0;
+                    double scaleY = 1.0;
+                    double winX = 0;
+                    double winY = 0;
+                    WindowInfo? winInfo = null;
+
+                    if (parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
+                    {
+                        winInfo = GetTargetWindowInfo(parentGroup);
+                        if (winInfo.HasValue)
+                        {
+                            if (parentGroup.RefWindowWidth > 0 && parentGroup.RefWindowHeight > 0)
+                            {
+                                scaleX = (double)winInfo.Value.Width / parentGroup.RefWindowWidth;
+                                scaleY = (double)winInfo.Value.Height / parentGroup.RefWindowHeight;
+                            }
+                            winX = winInfo.Value.X;
+                            winY = winInfo.Value.Y;
+                        }
+                        else
+                        {
+                            condition.TestResult = "Target Window Not Found";
+                            MacroEngineService.Instance.AddLog($"[Test Match] Warning: Target window not found for group '{parentGroup.Name}'.");
+                        }
+                    }
+
+                    System.Windows.Rect? searchRoi = null;
+                    OpenCvSharp.Rect? drawRoi = null;
+
+                    if (condition.UseRegion && condition.RegionW > 0 && condition.RegionH > 0)
+                    {
+                        double rxAbs = condition.RegionX * scaleX + winX;
+                        double ryAbs = condition.RegionY * scaleY + winY;
+
+                        double rx = rxAbs - bounds.Left;
+                        double ry = ryAbs - bounds.Top;
+
+                        double rw = condition.RegionW * scaleX;
+                        double rh = condition.RegionH * scaleY;
+
+                        searchRoi = new System.Windows.Rect(rx, ry, rw, rh);
+                        drawRoi = new OpenCvSharp.Rect((int)rx, (int)ry, (int)rw, (int)rh);
+                    }
+                    else if (winInfo.HasValue && parentGroup != null && parentGroup.CoordinateMode == CoordinateMode.WindowRelative)
+                    {
+                        double rx = winInfo.Value.X - bounds.Left;
+                        double ry = winInfo.Value.Y - bounds.Top;
+                        double rw = winInfo.Value.Width;
+                        double rh = winInfo.Value.Height;
+
+                        searchRoi = new System.Windows.Rect(rx, ry, rw, rh);
+                        drawRoi = new OpenCvSharp.Rect((int)rx, (int)ry, (int)rw, (int)rh);
+                    }
+
+                    string targetPath = condition.ImagePath;
+                    if (!string.IsNullOrEmpty(targetPath) && !Path.IsPathRooted(targetPath))
+                    {
+                        var currentRecipe = RecipeManager.Instance.CurrentRecipe;
+                        if (currentRecipe != null && !string.IsNullOrEmpty(currentRecipe.FilePath))
+                        {
+                            var dir = Path.GetDirectoryName(currentRecipe.FilePath);
+                            if (dir != null)
+                            {
+                                targetPath = Path.Combine(dir, targetPath);
+                            }
+                        }
+                    }
+
+                    var result = ImageSearchService.FindImageDetailed(captureSource, targetPath, condition.Threshold, searchRoi, scaleX, scaleY);
+
+                    condition.TestScore = result.Score;
+                    MacroEngineService.Instance.AddLog($"[Test Match] Score: {result.Score:F4} (Threshold: {condition.Threshold}), Scale: {scaleX:F2}x{scaleY:F2}, ROI: {searchRoi}");
+
+                    using (var mat = BitmapSourceConverter.ToMat(captureSource))
+                    {
+                        if (drawRoi.HasValue)
+                        {
+                            // Draw ROI in Blue (Thicker)
+                            Cv2.Rectangle(mat, drawRoi.Value, Scalar.Blue, 4);
+                            
+                            // Text Position Clamping
+                            int textY = drawRoi.Value.Y - 10;
+                            if (textY < 20) textY = drawRoi.Value.Y + 20;
+
+                            Cv2.PutText(mat, "ROI", new OpenCvSharp.Point(drawRoi.Value.X, textY),
+                                HersheyFonts.HersheySimplex, 0.7, Scalar.Blue, 2);
+                        }
+
+                        if (result.Point.HasValue)
+                        {
+                            double foundAbsX = result.Point.Value.X + bounds.Left;
+                            double foundAbsY = result.Point.Value.Y + bounds.Top;
+                            condition.TestResult = $"Found({foundAbsX:F0},{foundAbsY:F0}) Bounds[{bounds.Left},{bounds.Top}]";
+
+                            int tW = 50, tH = 50;
+                            try
+                            {
+                                using (var tempMat = Cv2.ImRead(targetPath))
+                                {
+                                    if (!tempMat.Empty())
+                                    {
+                                        tW = tempMat.Width;
+                                        tH = tempMat.Height;
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            int scaledW = (int)(tW * scaleX);
+                            int scaledH = (int)(tH * scaleY);
+
+                            int matchX = (int)(result.Point.Value.X - scaledW / 2);
+                            int matchY = (int)(result.Point.Value.Y - scaledH / 2);
+                            var matchRect = new OpenCvSharp.Rect(matchX, matchY, scaledW, scaledH);
+
+                            Cv2.Rectangle(mat, matchRect, Scalar.Red, 3);
+                            Cv2.PutText(mat, $"Found {result.Score:P0}", new OpenCvSharp.Point(matchX, matchY - 10),
+                                HersheyFonts.HersheySimplex, 0.5, Scalar.Red, 1);
+
+                            int cx = (int)result.Point.Value.X;
+                            int cy = (int)result.Point.Value.Y;
+                            Cv2.Line(mat, cx - 10, cy, cx + 10, cy, Scalar.Red, 2);
+                            Cv2.Line(mat, cx, cy - 10, cx, cy + 10, Scalar.Red, 2);
+                        }
+                        else
+                        {
+                            condition.TestResult = "Failed (Low Score)";
+                        }
+
+                        var resultSource = BitmapSourceConverter.ToBitmapSource(mat);
+                        resultSource.Freeze();
+
+                        RxApp.MainThreadScheduler.Schedule(() =>
+                        {
+                            TestResultImage = resultSource;
+                        });
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                condition.TestResult = "Error";
+                MacroEngineService.Instance.AddLog($"[Test] 이미지 매칭 중 오류: {ex.Message}");
+            }
         }
         
         #endregion

@@ -160,6 +160,20 @@ namespace Macro.ViewModels
             }
         }
 
+        private string _selectedGroupTimeoutJumpId = string.Empty;
+        public string SelectedGroupTimeoutJumpId
+        {
+            get => _selectedGroupTimeoutJumpId;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _selectedGroupTimeoutJumpId, value);
+                if (!_isUpdatingGroupTargets && SelectedGroup != null)
+                {
+                    SelectedGroup.TimeoutJumpId = value;
+                }
+            }
+        }
+
         private string _selectedGroupPostConditionVariableName = string.Empty;
         public string SelectedGroupPostConditionVariableName
         {

@@ -37,7 +37,6 @@
                                 <TextBlock Text="{Binding TotalStepCount, Mode=OneWay}" Foreground="#D4D4D4" FontSize="12"/>
                             </StackPanel>
                         </Border>
-                        <TextBlock Text="{Binding CurrentStepName, Mode=OneWay}" Foreground="#D4D4D4" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -79,9 +78,135 @@
                      Minimum="0" Maximum="{Binding TotalStepCount, Mode=OneWay}" Value="{Binding CurrentStepIndex, Mode=OneWay}"
                      Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-        <!-- Log Area -->
-        <Border Grid.Row="1" Margin="10" Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1">
-            <Grid>
+        <!-- Main Content Area -->
+        <Grid Grid.Row="1" Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Status Panel (Timeout + Current Step) -->
+                <RowDefinition Height="*"/>    <!-- Log Area -->
+            </Grid.RowDefinitions>
+
+            <!-- Status Panel -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,10" Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}">
+                
+                <!-- Current Active Step Card -->
+                <Border Background="#252526" BorderBrush="#007ACC" BorderThickness="1,1,1,4" CornerRadius="4" Padding="15,10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Header Line -->
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="🚀 RUNNING" Foreground="#007ACC" FontWeight="Bold" Margin="0,0,15,0"/>
+                                <Border Background="#3E3E42" CornerRadius="4" Padding="8,3">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding CurrentStepIndex}" Foreground="White" FontWeight="Bold"/>
+                                        <TextBlock Text=" / " Foreground="Gray"/>
+                                        <TextBlock Text="{Binding TotalStepCount}" Foreground="Gray"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <TextBlock Grid.Column="1" Text="{Binding CurrentStepName}" 
+                                       Foreground="White" FontWeight="Bold" FontSize="16" 
+                                       Margin="20,0,0,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                        
+                        <!-- Detail Status Line -->
+                        <Grid Grid.Row="1" Background="#2D2D30">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Pre Condition -->
+                            <Border Grid.Column="0" Padding="10" BorderBrush="#3E3E42" BorderThickness="0,0,1,0">
+                                <StackPanel>
+                                    <TextBlock Text="시작 조건" Foreground="Gray" FontSize="11" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding PreConditionStatus}" Foreground="#D4D4D4" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                            
+                            <!-- Arrow -->
+                            <TextBlock Grid.Column="1" Text="▶" Foreground="Gray" VerticalAlignment="Center" Margin="10,0"/>
+
+                            <!-- Action -->
+                            <Border Grid.Column="2" Padding="10" BorderBrush="#3E3E42" BorderThickness="0,0,1,0">
+                                <StackPanel>
+                                    <TextBlock Text="동작 (Action)" Foreground="Gray" FontSize="11" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding ActionStatus}" Foreground="#D4D4D4" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Arrow -->
+                            <TextBlock Grid.Column="3" Text="▶" Foreground="Gray" VerticalAlignment="Center" Margin="10,0"/>
+
+                            <!-- Post Condition -->
+                            <Border Grid.Column="4" Padding="10">
+                                <StackPanel>
+                                    <TextBlock Text="완료 확인" Foreground="Gray" FontSize="11" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding PostConditionStatus}" Foreground="#D4D4D4" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Timeout Status Panel -->
+                <ItemsControl ItemsSource="{Binding ActiveTimeouts}" Margin="0,10,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#333333" BorderBrush="#FF9800" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,5">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="⏳ Timeout: " Foreground="#FF9800" FontWeight="Bold"/>
+                                        <TextBlock Text="{Binding GroupName}" Foreground="White" FontWeight="SemiBold" Margin="5,0"/>
+                                        
+                                        <!-- Added Step Name Display -->
+                                        <Border Background="#444" CornerRadius="3" Padding="4,1" Margin="5,0">
+                                            <TextBlock Text="{Binding StepName}" Foreground="#DDD" FontSize="11"/>
+                                        </Border>
+                                        
+                                        <TextBlock Text=" (" Foreground="Gray" Margin="5,0,0,0"/>
+                                        <TextBlock Text="{Binding ElapsedMs, StringFormat=N0}" Foreground="#CCCCCC"/>
+                                        <TextBlock Text=" / " Foreground="Gray"/>
+                                        <TextBlock Text="{Binding TotalMs, StringFormat=N0}" Foreground="#CCCCCC"/>
+                                        <TextBlock Text=" ms)" Foreground="Gray"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding RemainingMs, StringFormat=N0}" Foreground="#FF9800" FontWeight="Bold" FontSize="14"/>
+                                        <TextBlock Text=" ms left" Foreground="#FF9800" FontSize="12" VerticalAlignment="Bottom" Margin="2,0,0,1"/>
+                                    </StackPanel>
+                                    
+                                    <!-- Background Progress -->
+                                    <ProgressBar Grid.ColumnSpan="2" VerticalAlignment="Bottom" Height="2" 
+                                                 Minimum="0" Maximum="{Binding TotalMs}" Value="{Binding ElapsedMs}"
+                                                 Background="Transparent" Foreground="#FF9800" BorderThickness="0" Opacity="0.5"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Log Area -->
+            <Border Grid.Row="1" Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1">
+                <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -104,6 +229,8 @@
                 </ListBox>
             </Grid>
         </Border>
+        
+        </Grid>
 
         <!-- Status Bar -->
         <Border Grid.Row="2" Background="#007ACC" Padding="10,5">

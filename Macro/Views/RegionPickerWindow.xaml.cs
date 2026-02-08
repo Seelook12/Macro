@@ -23,10 +23,26 @@ namespace Macro.Views
             _screenLeft = left;
             _screenTop = top;
 
-            this.Left = left;
-            this.Top = top;
-            this.Width = width;
-            this.Height = height;
+            // DPI Scale Calculation
+            double dpiScaleX = 1.0;
+            double dpiScaleY = 1.0;
+            
+            var mainWindow = System.Windows.Application.Current.MainWindow;
+            if (mainWindow != null)
+            {
+                var source = System.Windows.PresentationSource.FromVisual(mainWindow);
+                if (source?.CompositionTarget != null)
+                {
+                    dpiScaleX = source.CompositionTarget.TransformToDevice.M11;
+                    dpiScaleY = source.CompositionTarget.TransformToDevice.M22;
+                }
+            }
+
+            // Convert Physical to Logical
+            this.Left = left / dpiScaleX;
+            this.Top = top / dpiScaleY;
+            this.Width = width / dpiScaleX;
+            this.Height = height / dpiScaleY;
 
             CaptureImage.Source = captureImage;
             

@@ -412,9 +412,32 @@
     - `RecipeCompiler` 로직 수정: 타임아웃 조건(`TimeoutCheckCondition`)을 주입할 때, 해당 그룹의 **시작 스텝(`IsGroupStart`)에 대해서는 자기 자신의 타임아웃 검사를 제외**하도록 예외 처리.
     - 이를 통해 액션이 안전하게 실행되어 타이머가 리셋된 후, 다음 스텝부터 정상적으로 시간을 체크하도록 흐름을 바로잡음.
 
+### 3.48. 상수/변수 하이브리드 입력 시스템 및 지원 범위 확장 (2026-02-09)
+- **DynamicIntInput 컨트롤 도입**: 상수(숫자)와 변수 선택을 원클릭으로 전환할 수 있는 전용 UI 컴포넌트 구현. 디자인 개선을 위해 벡터 아이콘(#, {x}) 및 모드별 강조 색상 적용.
+- **범용 변수 지원**: `Delay`, `RepeatCount`, `RetryCount`, `RetryDelayMs`, `TimeoutMs` 등 주요 수치형 속성에 변수 사용 기능 통합.
+- **실행 엔진 고도화**: 실행 시점에 변수값을 해석하여 루프 및 재시도 로직에 동적으로 주입하는 파이프라인 구축.
+- **컴파일러 확장**: 그룹 타임아웃 조건을 변수 기반으로 동적 생성할 수 있도록 `RecipeCompiler` 및 `TimeoutCheckCondition` 구조 개선.
+- **내부 변수 관리 최적화**: `__`로 시작하는 시스템 내부 변수(타임아웃용 등)가 `.vars.json` 파일에 저장되지 않도록 영속성 제외 로직 추가.
+
+- **변수 기반 실행 로직 보완 (Fix) (2026-02-10)**:
+    - **IdleAction 변수 미적용 수정**:
+        - `IdleAction` 모델에 `SourceType` 및 `VariableName` 속성이 누락되어, 변수 모드로 설정해도 실행 시 상수 딜레이(`DelayTimeMs`)만 적용되던 문제를 수정.
+        - `ExecuteAsync`에서 실행 시점에 변수값을 해석하여 대기 시간을 동적으로 결정하도록 로직 개선.
+    - **단일 실행(Single Step) 변수 주입**:
+        - 티칭 에디터에서 [단일 실행] 시, 그룹에 정의된 정수 변수(`GroupIntVariables`)가 엔진에 등록되지 않아 변수 기반 속성들이 동작하지 않던 문제 해결.
+        - `RecipeCompiler.CompileSingleStep`에서 상위 그룹들의 정수 변수를 수집하여 `MacroEngineService`에 임시 등록하는 로직 추가.
+    - **변수 해석 안정성 강화**:
+        - `IdleAction`, `DelayCondition`, `TimeoutCheckCondition` 및 엔진 루프(`Repeat/Retry`)에서 변수명 앞뒤 공백(`Trim`)을 자동 제거하여 오작동 방지.
+        - 변수를 찾지 못하거나 값이 유효하지 않을 경우, 조용히 상수값으로 넘어가지 않고 **경고 로그(`[Warning]`)**를 출력하여 사용자가 원인을 파악할 수 있도록 개선.
+    - **디버깅 강화**:
+        - 실행 시점에 프로그램이 인식하는 설정값(`SourceType`, `VariableName`, `ConstantValue`)을 확인하기 위해 `DelayCondition`, `IdleAction`, `TimeoutCheckCondition`에 상세 디버그 로그(`[Debug]`) 추가.
+    - **UI 상태 동기화 (UI Sync)**:
+        - 엔진 내부 로직은 변수값으로 타임아웃을 체크하지만, 대시보드(진행바)는 여전히 상수값(`TimeoutMs`)을 기준으로 그려지는 불일치 현상 수정.
+        - `TimeoutCheckCondition`에 `RuntimeTimeoutMs` 속성을 추가하여 실제 적용된 시간을 저장하고, `MacroEngineService`가 이를 참조하여 정확한 진행률을 표시하도록 개선.
+        - `DelayCondition` 역시 대시보드에서 상수값(`DelayTimeMs`)만 표시되던 문제를 수정하기 위해 `RuntimeDelayMs` 속성을 추가하고 `DashboardViewModel`이 이를 참조하도록 로직 동기화.
+
 ## 4. 최종 빌드 상태
-- **결과**: `dotnet build` 실패 (Exit Code: 1) - 파일 잠금 문제 (`Macro.exe` 사용 중)
-- **조치**: 실행 중인 프로그램을 종료하고 다시 빌드하면 정상 동작 예상.
+- **결과**: `dotnet build` 성공 (2026-02-09)
 
 
 

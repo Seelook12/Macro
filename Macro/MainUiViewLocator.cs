@@ -15,6 +15,7 @@ namespace Macro
             Locator.CurrentMutable.Register(() => new DashboardView(), typeof(IViewFor<DashboardViewModel>));
             Locator.CurrentMutable.Register(() => new RecipeView(), typeof(IViewFor<RecipeViewModel>));
             Locator.CurrentMutable.Register(() => new TeachingView(), typeof(IViewFor<TeachingViewModel>));
+            Locator.CurrentMutable.Register(() => new VariableManagerView(), typeof(IViewFor<VariableManagerViewModel>));
         }
     }
 }

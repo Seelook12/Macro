@@ -388,15 +388,14 @@ namespace Macro.ViewModels
 
             InitializeCommands();
 
-            this.WhenActivated(disposables =>
-            {
-                LoadData();
+            // [Fix] Load Data Immediately (regardless of View activation)
+            // This ensures VariableManagerVM (which shares DefinedVariables) has data even if TeachingView is not visited.
+            LoadData();
                 
-                var dRecipe = RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
-                    .Skip(1)
-                    .Subscribe(_ => LoadData());
-                disposables.Add(dRecipe);
-            });
+            RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
+                .Skip(1)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(_ => LoadData());
         }
 
         #endregion

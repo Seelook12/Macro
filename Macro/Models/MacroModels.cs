@@ -20,6 +20,12 @@ namespace Macro.Models
         ParentRelative
     }
 
+    public enum ValueSourceType
+    {
+        Constant,
+        Variable
+    }
+
     public interface ISupportCoordinateTransform
     {
         void SetTransform(double scaleX, double scaleY, int offsetX, int offsetY);
@@ -80,6 +86,8 @@ namespace Macro.Models
     public class DelayCondition : ReactiveObject, IMacroCondition
     {
         private int _delayTimeMs;
+        private ValueSourceType _sourceType = ValueSourceType.Constant;
+        private string _variableName = string.Empty;
         private string _failJumpName = string.Empty;
         
         // Runtime Tracking
@@ -92,6 +100,25 @@ namespace Macro.Models
         {
             get => _delayTimeMs;
             set => this.RaiseAndSetIfChanged(ref _delayTimeMs, value);
+        }
+
+        private double _runtimeDelayMs;
+        public double RuntimeDelayMs
+        {
+            get => _runtimeDelayMs;
+            set => this.RaiseAndSetIfChanged(ref _runtimeDelayMs, value);
+        }
+
+        public ValueSourceType SourceType
+        {
+            get => _sourceType;
+            set => this.RaiseAndSetIfChanged(ref _sourceType, value);
+        }
+
+        public string VariableName
+        {
+            get => _variableName;
+            set => this.RaiseAndSetIfChanged(ref _variableName, value);
         }
 
         public string FailJumpName
@@ -113,7 +140,30 @@ namespace Macro.Models
             _startTime = DateTime.Now;
             try
             {
-                await Task.Delay(DelayTimeMs, token);
+                // [Debug] 값 확인용 로그
+                MacroEngineService.Instance.AddLog($"[Debug] DelayCondition: Type={SourceType}, Var='{VariableName}', Const={DelayTimeMs}ms");
+
+                int finalDelay = DelayTimeMs;
+
+                if (SourceType == ValueSourceType.Variable && !string.IsNullOrEmpty(VariableName))
+                {
+                    string varName = VariableName.Trim();
+                    var vars = MacroEngineService.Instance.Variables;
+                    if (vars.TryGetValue(varName, out var valStr) && int.TryParse(valStr, out int val))
+                    {
+                        finalDelay = val;
+                        MacroEngineService.Instance.AddLog($"[Debug] -> Resolved Variable '{varName}' = {val}ms");
+                    }
+                    else
+                    {
+                         MacroEngineService.Instance.AddLog($"[Warning] DelayCondition: Variable '{varName}' not found. Using constant {finalDelay}ms.");
+                    }
+                }
+
+                // [Fix] Update runtime property for UI synchronization
+                RuntimeDelayMs = finalDelay;
+
+                await Task.Delay(Math.Max(0, finalDelay), token);
                 return true;
             }
             finally
@@ -887,6 +937,8 @@ namespace Macro.Models
 
         private string _startTimeVariableName;
         private int _timeoutMs;
+        private ValueSourceType _timeoutSource;
+        private string _timeoutVariable;
         private string _timeoutJumpId;
         private string _groupName; // Added for UI display
         private string _failJumpName = string.Empty;
@@ -894,14 +946,25 @@ namespace Macro.Models
 
         public string GroupName => _groupName;
         public int TimeoutMs => _timeoutMs;
+        
+        private double _runtimeTimeoutMs;
+        public double RuntimeTimeoutMs
+        {
+            get => _runtimeTimeoutMs;
+            set => this.RaiseAndSetIfChanged(ref _runtimeTimeoutMs, value);
+        }
+
         public string StartTimeVariableName => _startTimeVariableName;
 
-        public TimeoutCheckCondition(IMacroCondition? inner, string groupName, string startTimeVar, int timeoutMs, string timeoutJumpId)
+        public TimeoutCheckCondition(IMacroCondition? inner, string groupName, string startTimeVar, int timeoutMs, ValueSourceType source, string timeoutVar, string timeoutJumpId)
         {
             _inner = inner;
             _groupName = groupName;
             _startTimeVariableName = startTimeVar;
             _timeoutMs = timeoutMs;
+            _runtimeTimeoutMs = timeoutMs; // Initialize with constant
+            _timeoutSource = source;
+            _timeoutVariable = timeoutVar;
             _timeoutJumpId = timeoutJumpId;
         }
 
@@ -929,14 +992,37 @@ namespace Macro.Models
 
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
+            // [Debug] 값 확인용 로그
+            MacroEngineService.Instance.AddLog($"[Debug] TimeoutCheck: Group='{GroupName}', Type={_timeoutSource}, Var='{_timeoutVariable}', Const={_timeoutMs}ms");
+
             // 1. Timeout Check
             var vars = MacroEngineService.Instance.Variables;
+            
+            // Resolve dynamic timeout value
+            int finalTimeout = _timeoutMs;
+            if (_timeoutSource == ValueSourceType.Variable && !string.IsNullOrEmpty(_timeoutVariable))
+            {
+                string varName = _timeoutVariable.Trim();
+                if (vars.TryGetValue(varName, out var valStr) && int.TryParse(valStr, out int val))
+                {
+                    finalTimeout = val;
+                    MacroEngineService.Instance.AddLog($"[Debug] -> Resolved Timeout Var '{varName}' = {val}ms");
+                }
+                else
+                {
+                    MacroEngineService.Instance.AddLog($"[Warning] Timeout Variable '{varName}' not found. Using constant {finalTimeout}ms.");
+                }
+            }
+
+            // [Fix] Update runtime property for UI synchronization
+            RuntimeTimeoutMs = finalTimeout;
+
             if (vars.TryGetValue(_startTimeVariableName, out var startTickStr) && long.TryParse(startTickStr, out var startTick))
             {
                 var elapsed = TimeSpan.FromTicks(DateTime.Now.Ticks - startTick).TotalMilliseconds;
-                if (elapsed > _timeoutMs)
+                if (elapsed > finalTimeout)
                 {
-                    MacroEngineService.Instance.AddLog($"[Timeout] Group timeout exceeded ({elapsed:F0}ms > {_timeoutMs}ms). Jumping to fallback.");
+                    MacroEngineService.Instance.AddLog($"[Timeout] Group timeout exceeded ({elapsed:F0}ms > {finalTimeout}ms). Jumping to fallback.");
                     
                     // [Fix] Reset timer on timeout. 
                     // This ensures that if the FailJump leads back to this group (Retry/Loop), 
@@ -1372,12 +1458,26 @@ namespace Macro.Models
     public class IdleAction : ReactiveObject, IMacroAction
     {
         private int _delayTimeMs;
+        private ValueSourceType _sourceType = ValueSourceType.Constant;
+        private string _variableName = string.Empty;
         private string _failJumpName = string.Empty;
 
         public int DelayTimeMs
         {
             get => _delayTimeMs;
             set => this.RaiseAndSetIfChanged(ref _delayTimeMs, value);
+        }
+
+        public ValueSourceType SourceType
+        {
+            get => _sourceType;
+            set => this.RaiseAndSetIfChanged(ref _sourceType, value);
+        }
+
+        public string VariableName
+        {
+            get => _variableName;
+            set => this.RaiseAndSetIfChanged(ref _variableName, value);
         }
 
         public string FailJumpName
@@ -1396,9 +1496,29 @@ namespace Macro.Models
 
         public async Task ExecuteAsync(CancellationToken token, System.Windows.Point? conditionPoint = null)
         {
-            if (DelayTimeMs > 0)
+            // [Debug] 값 확인용 로그
+            MacroEngineService.Instance.AddLog($"[Debug] IdleAction: Type={SourceType}, Var='{VariableName}', Const={DelayTimeMs}ms");
+
+            int finalDelay = DelayTimeMs;
+
+            if (SourceType == ValueSourceType.Variable && !string.IsNullOrEmpty(VariableName))
             {
-                await Task.Delay(DelayTimeMs, token);
+                string varName = VariableName.Trim();
+                var vars = MacroEngineService.Instance.Variables;
+                if (vars.TryGetValue(varName, out var valStr) && int.TryParse(valStr, out int val))
+                {
+                    finalDelay = val;
+                    MacroEngineService.Instance.AddLog($"[Debug] -> Resolved Variable '{varName}' = {val}ms");
+                }
+                else
+                {
+                    MacroEngineService.Instance.AddLog($"[Warning] IdleAction: Variable '{varName}' not found or invalid. Using constant {finalDelay}ms.");
+                }
+            }
+
+            if (finalDelay > 0)
+            {
+                await Task.Delay(finalDelay, token);
             }
         }
     }
@@ -1628,8 +1748,16 @@ namespace Macro.Models
         private IMacroCondition? _postCondition;
 
         private int _retryCount = 0;
+        private ValueSourceType _retryCountSource = ValueSourceType.Constant;
+        private string _retryCountVariable = string.Empty;
+
         private int _retryDelayMs = 500;
+        private ValueSourceType _retryDelaySource = ValueSourceType.Constant;
+        private string _retryDelayVariable = string.Empty;
+
         private int _repeatCount = 1;
+        private ValueSourceType _repeatCountSource = ValueSourceType.Constant;
+        private string _repeatCountVariable = string.Empty;
         
         // Coordinate Mode Fields
         private CoordinateMode _coordinateMode = CoordinateMode.Global;
@@ -1726,16 +1854,52 @@ namespace Macro.Models
             set => this.RaiseAndSetIfChanged(ref _retryCount, value);
         }
 
+        public ValueSourceType RetryCountSource
+        {
+            get => _retryCountSource;
+            set => this.RaiseAndSetIfChanged(ref _retryCountSource, value);
+        }
+
+        public string RetryCountVariable
+        {
+            get => _retryCountVariable;
+            set => this.RaiseAndSetIfChanged(ref _retryCountVariable, value);
+        }
+
         public int RetryDelayMs
         {
             get => _retryDelayMs;
             set => this.RaiseAndSetIfChanged(ref _retryDelayMs, value);
         }
 
+        public ValueSourceType RetryDelaySource
+        {
+            get => _retryDelaySource;
+            set => this.RaiseAndSetIfChanged(ref _retryDelaySource, value);
+        }
+
+        public string RetryDelayVariable
+        {
+            get => _retryDelayVariable;
+            set => this.RaiseAndSetIfChanged(ref _retryDelayVariable, value);
+        }
+
         public int RepeatCount
         {
             get => _repeatCount;
             set => this.RaiseAndSetIfChanged(ref _repeatCount, value);
+        }
+
+        public ValueSourceType RepeatCountSource
+        {
+            get => _repeatCountSource;
+            set => this.RaiseAndSetIfChanged(ref _repeatCountSource, value);
+        }
+
+        public string RepeatCountVariable
+        {
+            get => _repeatCountVariable;
+            set => this.RaiseAndSetIfChanged(ref _repeatCountVariable, value);
         }
 
         public CoordinateMode CoordinateMode
@@ -1884,6 +2048,8 @@ namespace Macro.Models
 
         // Timeout Properties
         private int _timeoutMs = 0;
+        private ValueSourceType _timeoutSource = ValueSourceType.Constant;
+        private string _timeoutVariable = string.Empty;
         private string _timeoutJumpId = string.Empty;
 
         // Shared Context Fields
@@ -1913,6 +2079,18 @@ namespace Macro.Models
         {
             get => _timeoutMs;
             set => this.RaiseAndSetIfChanged(ref _timeoutMs, value);
+        }
+
+        public ValueSourceType TimeoutSource
+        {
+            get => _timeoutSource;
+            set => this.RaiseAndSetIfChanged(ref _timeoutSource, value);
+        }
+
+        public string TimeoutVariable
+        {
+            get => _timeoutVariable;
+            set => this.RaiseAndSetIfChanged(ref _timeoutVariable, value);
         }
 
         public string TimeoutJumpId

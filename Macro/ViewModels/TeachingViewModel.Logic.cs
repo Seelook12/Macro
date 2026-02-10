@@ -395,7 +395,8 @@ namespace Macro.ViewModels
             var variables = new List<string>();
             foreach (var v in DefinedVariables)
             {
-                if (!variables.Contains(v.Name)) variables.Add(v.Name);
+                // [Filter] Hide internal variables
+                if (!v.Name.StartsWith("__") && !variables.Contains(v.Name)) variables.Add(v.Name);
             }
 
             var group = SelectedGroup ?? (SelectedSequence != null ? FindParentGroup(SelectedSequence) : null);
@@ -416,7 +417,8 @@ namespace Macro.ViewModels
 
             foreach (var v in localVars)
             {
-                if (!variables.Contains(v)) variables.Add(v);
+                // [Filter] Hide internal variables
+                if (!v.StartsWith("__") && !variables.Contains(v)) variables.Add(v);
             }
 
             if (!variables.SequenceEqual(AvailableIntVariables))

@@ -20,6 +20,7 @@
                 <Button Content="실행 (대시보드)" Command="{Binding GoDashboard}" Width="120" Margin="10,5"/>
                 <Button Content="레시피 관리" Command="{Binding GoRecipe}" Width="120" Margin="5"/>
                 <Button Content="티칭 (동작생성)" Command="{Binding GoTeaching}" Width="120" Margin="5"/>
+                <Button Content="티칭 (변수관리)" Command="{Binding GoVariableManager}" Width="120" Margin="5"/>
             </StackPanel>
             
             <TextBlock Text="{Binding CurrentRecipeName}" 

@@ -278,8 +278,11 @@ namespace Macro.ViewModels
                 if (isCurrent && delay.StartTime.HasValue)
                 {
                     var elapsed = (DateTime.Now - delay.StartTime.Value).TotalMilliseconds;
-                    var remaining = Math.Max(0, delay.DelayTimeMs - elapsed);
-                    return $"{typeName}: {elapsed/1000.0:F1}s / {delay.DelayTimeMs/1000.0:F1}s";
+                    // Use RuntimeDelayMs if set (non-zero), otherwise fallback to DelayTimeMs
+                    double totalMs = delay.RuntimeDelayMs > 0 ? delay.RuntimeDelayMs : delay.DelayTimeMs;
+                    
+                    var remaining = Math.Max(0, totalMs - elapsed);
+                    return $"{typeName}: {elapsed/1000.0:F1}s / {totalMs/1000.0:F1}s";
                 }
                 else if (isPast)
                 {

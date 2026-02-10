@@ -16,6 +16,7 @@ namespace Macro.ViewModels
         public DashboardViewModel DashboardVM { get; }
         public RecipeViewModel RecipeVM { get; }
         public TeachingViewModel TeachingVM { get; }
+        public VariableManagerViewModel VariableManagerVM { get; }
 
         public string CurrentRecipeName
         {
@@ -27,6 +28,7 @@ namespace Macro.ViewModels
         public ReactiveCommand<Unit, IRoutableViewModel> GoDashboard { get; }
         public ReactiveCommand<Unit, IRoutableViewModel> GoRecipe { get; }
         public ReactiveCommand<Unit, IRoutableViewModel> GoTeaching { get; }
+        public ReactiveCommand<Unit, IRoutableViewModel> GoVariableManager { get; }
 
         public MainWindowViewModel()
         {
@@ -34,11 +36,14 @@ namespace Macro.ViewModels
             DashboardVM = new DashboardViewModel(this);
             RecipeVM = new RecipeViewModel(this);
             TeachingVM = new TeachingViewModel(this);
+            // TeachingVM의 변수 컬렉션을 공유하여 데이터 동기화
+            VariableManagerVM = new VariableManagerViewModel(this, TeachingVM.DefinedVariables);
 
             // 네비게이션 커맨드 설정
             GoDashboard = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(DashboardVM));
             GoRecipe = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(RecipeVM));
             GoTeaching = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(TeachingVM));
+            GoVariableManager = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(VariableManagerVM));
 
             // RecipeManager 구독하여 현재 레시피 이름 업데이트
             RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)

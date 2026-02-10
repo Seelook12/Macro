@@ -145,15 +145,16 @@ namespace Macro.Services
                 {
                     if (Variables.TryGetValue(timeout.StartTimeVariableName, out var tickStr) && long.TryParse(tickStr, out var startTicks))
                     {
+                        var effectiveTotalMs = timeout.RuntimeTimeoutMs > 0 ? timeout.RuntimeTimeoutMs : timeout.TimeoutMs;
                         var elapsedMs = TimeSpan.FromTicks(DateTime.Now.Ticks - startTicks).TotalMilliseconds;
-                        var remainingMs = timeout.TimeoutMs - elapsedMs;
-                        var progress = Math.Clamp(elapsedMs / timeout.TimeoutMs, 0.0, 1.0);
+                        var remainingMs = effectiveTotalMs - elapsedMs;
+                        var progress = effectiveTotalMs > 0 ? Math.Clamp(elapsedMs / effectiveTotalMs, 0.0, 1.0) : 0.0;
 
                         results.Add(new TimeoutStatus
                         {
                             GroupName = timeout.GroupName,
                             StepName = _currentSequenceItem.Name,
-                            TotalMs = timeout.TimeoutMs,
+                            TotalMs = effectiveTotalMs,
                             ElapsedMs = elapsedMs,
                             RemainingMs = remainingMs,
                             Progress = progress,
@@ -243,6 +244,38 @@ namespace Macro.Services
 
                         var item = sequenceList[currentIndex];
                         _currentSequenceItem = item;
+
+                        // [Dynamic Value Resolution]
+                        int finalRepeatCount = item.RepeatCount;
+                        if (item.RepeatCountSource == ValueSourceType.Variable && !string.IsNullOrEmpty(item.RepeatCountVariable))
+                        {
+                            string varName = item.RepeatCountVariable.Trim();
+                            if (Variables.TryGetValue(varName, out var valStr) && int.TryParse(valStr, out int val))
+                                finalRepeatCount = val;
+                            else
+                                AddLog($"[Warning] Step '{item.Name}': Repeat Variable '{varName}' not found or invalid. Using constant {finalRepeatCount}.");
+                        }
+
+                        int finalRetryCount = item.RetryCount;
+                        if (item.RetryCountSource == ValueSourceType.Variable && !string.IsNullOrEmpty(item.RetryCountVariable))
+                        {
+                            string varName = item.RetryCountVariable.Trim();
+                            if (Variables.TryGetValue(varName, out var valStr) && int.TryParse(valStr, out int val))
+                                finalRetryCount = val;
+                            else
+                                AddLog($"[Warning] Step '{item.Name}': Retry Variable '{varName}' not found or invalid. Using constant {finalRetryCount}.");
+                        }
+
+                        int finalRetryDelayMs = item.RetryDelayMs;
+                        if (item.RetryDelaySource == ValueSourceType.Variable && !string.IsNullOrEmpty(item.RetryDelayVariable))
+                        {
+                            string varName = item.RetryDelayVariable.Trim();
+                            if (Variables.TryGetValue(varName, out var valStr) && int.TryParse(valStr, out int val))
+                                finalRetryDelayMs = val;
+                            else
+                                AddLog($"[Warning] Step '{item.Name}': Retry Delay Variable '{varName}' not found or invalid. Using constant {finalRetryDelayMs}.");
+                        }
+
                         int stepIndex = currentIndex + 1;
                         
                         CurrentStepIndex = stepIndex;
@@ -261,7 +294,7 @@ namespace Macro.Services
                         string? jumpTargetName = null;
                         string? jumpTargetId = null;
 
-                        for (int repeat = 1; repeat <= item.RepeatCount; repeat++)
+                        for (int repeat = 1; repeat <= finalRepeatCount; repeat++)
                         {
                             if (token.IsCancellationRequested) break;
 
@@ -273,9 +306,9 @@ namespace Macro.Services
                             }
                             if (token.IsCancellationRequested) break;
 
-                            if (item.RepeatCount > 1)
+                            if (finalRepeatCount > 1)
                             {
-                                AddLog($"  - 반복 실행 중 ({repeat}/{item.RepeatCount})");
+                                AddLog($"  - 반복 실행 중 ({repeat}/{finalRepeatCount})");
                             }
                         
                             int retryAttempt = 0;
@@ -415,11 +448,11 @@ namespace Macro.Services
                                 }
                                 catch (ComponentFailureException cfex)
                                 {
-                                    if (retryAttempt < item.RetryCount)
+                                    if (retryAttempt < finalRetryCount)
                                     {
                                         retryAttempt++;
-                                        AddLog($"    !!! 실패: {cfex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
-                                        await Task.Delay(item.RetryDelayMs, token);
+                                        AddLog($"    !!! 실패: {cfex.Message}. 재시도 중... ({retryAttempt}/{finalRetryCount})");
+                                        await Task.Delay(finalRetryDelayMs, token);
                                     }
                                     else
                                     {
@@ -432,11 +465,11 @@ namespace Macro.Services
                                 }
                                 catch (Exception ex) when (!(ex is OperationCanceledException))
                                 {
-                                    if (retryAttempt < item.RetryCount)
+                                    if (retryAttempt < finalRetryCount)
                                     {
                                         retryAttempt++;
-                                        AddLog($"    !!! 예상치 못한 오류: {ex.Message}. 재시도 중... ({retryAttempt}/{item.RetryCount})");
-                                        await Task.Delay(item.RetryDelayMs, token);
+                                        AddLog($"    !!! 예상치 못한 오류: {ex.Message}. 재시도 중... ({retryAttempt}/{finalRetryCount})");
+                                        await Task.Delay(finalRetryDelayMs, token);
                                     }
                                     else
                                     {
@@ -547,6 +580,10 @@ namespace Macro.Services
                 CurrentStepName = string.Empty;
                 CurrentStepIndex = 0;
                 TotalStepCount = 0;
+
+                // [Cleanup] Remove internal runtime variables
+                var keysToRemove = Variables.Keys.Where(k => k.StartsWith("__")).ToList();
+                foreach (var k in keysToRemove) Variables.Remove(k, out _);
                 
                 var oldCts = _cts;
                 _cts = null;
@@ -696,8 +733,11 @@ namespace Macro.Services
             // 1. Update Runtime Memory
             Variables[name] = value;
 
-            // 2. Persist to File
-            RecipeManager.Instance.UpdateVariableValue(name, value);
+            // 2. Persist to File (Skip internal variables)
+            if (!name.StartsWith("__"))
+            {
+                RecipeManager.Instance.UpdateVariableValue(name, value);
+            }
         }
 
         private string GetTypeName(object obj)

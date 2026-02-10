@@ -25,16 +25,16 @@ namespace Macro.Services
         {
             public SequenceGroup? ParentGroup { get; }
             public Dictionary<string, System.Windows.Point> ScopeVariables { get; }
-            public List<(string GroupName, string VarName, int Duration, string JumpId)> Timeouts { get; }
+            public List<(string GroupName, string VarName, int Duration, ValueSourceType Source, string TimeoutVar, string JumpId)> Timeouts { get; }
 
             public CompilationContext(
                 SequenceGroup? parentGroup, 
                 Dictionary<string, System.Windows.Point>? scopeVariables, 
-                List<(string, string, int, string)>? timeouts)
+                List<(string, string, int, ValueSourceType, string, string)>? timeouts)
             {
                 ParentGroup = parentGroup;
                 ScopeVariables = scopeVariables ?? new Dictionary<string, System.Windows.Point>();
-                Timeouts = timeouts ?? new List<(string, string, int, string)>();
+                Timeouts = timeouts ?? new List<(string, string, int, ValueSourceType, string, string)>();
             }
 
             /// <summary>
@@ -53,12 +53,16 @@ namespace Macro.Services
                 }
 
                 // 2. Timeout Context Stack (Copy & Add)
-                var newTimeouts = new List<(string, string, int, string)>(Timeouts);
-                if (currentGroup.TimeoutMs > 0)
+                var newTimeouts = new List<(string, string, int, ValueSourceType, string, string)>(Timeouts);
+                
+                // 타임아웃이 설정되어 있거나(>0), 변수로 설정된 경우
+                bool hasTimeout = currentGroup.TimeoutMs > 0 || (currentGroup.TimeoutSource == ValueSourceType.Variable && !string.IsNullOrEmpty(currentGroup.TimeoutVariable));
+
+                if (hasTimeout)
                 {
                     // Start 스텝에서 타이머를 리셋할 때 사용할 변수명
                     string startTimeVar = $"__GroupStart_{currentGroup.Id:N}";
-                    newTimeouts.Add((currentGroup.Name, startTimeVar, currentGroup.TimeoutMs, currentGroup.TimeoutJumpId));
+                    newTimeouts.Add((currentGroup.Name, startTimeVar, currentGroup.TimeoutMs, currentGroup.TimeoutSource, currentGroup.TimeoutVariable, currentGroup.TimeoutJumpId));
                 }
 
                 // 3. Effective Group Context (Inheritance Logic)
@@ -84,6 +88,8 @@ namespace Macro.Services
                         // Own Settings
                         PostCondition = currentGroup.PostCondition,
                         TimeoutMs = currentGroup.TimeoutMs,
+                        TimeoutSource = currentGroup.TimeoutSource,
+                        TimeoutVariable = currentGroup.TimeoutVariable,
                         TimeoutJumpId = currentGroup.TimeoutJumpId
                     };
                 }
@@ -190,22 +196,29 @@ namespace Macro.Services
 
             // A. Timer Reset Injection (Start Step of a Timeout Group)
             // 현재 스텝이 속한 그룹(가장 마지막에 추가된 타임아웃 컨텍스트)의 시작점이라면 타이머 리셋 액션 추가
-            if (item.IsGroupStart && context.ParentGroup != null && context.ParentGroup.TimeoutMs > 0)
+            // (TimeoutMs > 0 이거나 Variable Source인 경우)
+            if (item.IsGroupStart && context.ParentGroup != null)
             {
-                // 가장 최근(자신)의 타임아웃 컨텍스트 가져오기
-                var myTimeout = timeouts.Last(); 
-                var setTimeAction = new CurrentTimeAction { VariableName = myTimeout.VarName };
+                bool hasTimeout = context.ParentGroup.TimeoutMs > 0 || 
+                                  (context.ParentGroup.TimeoutSource == ValueSourceType.Variable && !string.IsNullOrEmpty(context.ParentGroup.TimeoutVariable));
+                
+                if (hasTimeout)
+                {
+                    // 가장 최근(자신)의 타임아웃 컨텍스트 가져오기
+                    var myTimeout = timeouts.Last(); 
+                    var setTimeAction = new CurrentTimeAction { VariableName = myTimeout.VarName };
 
-                if (item.Action is MultiAction multi)
-                {
-                    multi.Actions.Insert(0, setTimeAction);
-                }
-                else
-                {
-                    var newMulti = new MultiAction();
-                    newMulti.Actions.Add(setTimeAction);
-                    newMulti.Actions.Add(item.Action);
-                    item.Action = newMulti;
+                    if (item.Action is MultiAction multi)
+                    {
+                        multi.Actions.Insert(0, setTimeAction);
+                    }
+                    else
+                    {
+                        var newMulti = new MultiAction();
+                        newMulti.Actions.Add(setTimeAction);
+                        newMulti.Actions.Add(item.Action);
+                        item.Action = newMulti;
+                    }
                 }
             }
 
@@ -220,7 +233,7 @@ namespace Macro.Services
             for (int i = 0; i < count; i++)
             {
                 var ctx = timeouts[i];
-                item.PreCondition = new TimeoutCheckCondition(item.PreCondition, ctx.GroupName, ctx.VarName, ctx.Duration, ctx.JumpId);
+                item.PreCondition = new TimeoutCheckCondition(item.PreCondition, ctx.GroupName, ctx.VarName, ctx.Duration, ctx.Source, ctx.TimeoutVar, ctx.JumpId);
             }
         }
 
@@ -331,6 +344,14 @@ namespace Macro.Services
                     foreach (var v in group.Variables)
                     {
                         runtimeVars[v.Name] = new System.Windows.Point(v.X, v.Y);
+                    }
+                }
+
+                if (group.IntVariables != null)
+                {
+                    foreach (var iv in group.IntVariables)
+                    {
+                        MacroEngineService.Instance.UpdateVariable(iv.Name, iv.Value.ToString());
                     }
                 }
 

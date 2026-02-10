@@ -28,6 +28,7 @@ namespace Macro
                 DashboardViewModel => new DashboardView(),
                 RecipeViewModel => new RecipeView(),
                 TeachingViewModel => new TeachingView(),
+                VariableManagerViewModel => new VariableManagerView(),
                 _ => throw new ArgumentOutOfRangeException(nameof(viewModel), $"뷰를 찾을 수 없습니다: {viewModel.GetType().Name}")
             };
         }

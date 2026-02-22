@@ -38,6 +38,7 @@ namespace Macro.Models
     [JsonDerivedType(typeof(VariableCompareCondition), typeDiscriminator: nameof(VariableCompareCondition))]
     [JsonDerivedType(typeof(SwitchCaseCondition), typeDiscriminator: nameof(SwitchCaseCondition))]
     [JsonDerivedType(typeof(ProcessRunningCondition), typeDiscriminator: nameof(ProcessRunningCondition))]
+    [JsonDerivedType(typeof(TimeoutCheckCondition), typeDiscriminator: nameof(TimeoutCheckCondition))]
     public interface IMacroCondition : IReactiveObject
     {
         Task<bool> CheckAsync(CancellationToken token = default);
@@ -325,7 +326,7 @@ namespace Macro.Models
 
         public async Task<bool> CheckAsync(CancellationToken token = default)
         {
-            _foundPoint = null;
+            FoundPoint = null;
             return await Task.Run(async () =>
             {
                 int attempts = Math.Max(1, MaxSearchCount);
@@ -414,7 +415,7 @@ namespace Macro.Models
                         if (result.Point.HasValue)
                         {
                             // 이미지 로컬 좌표 -> 스크린 절대 좌표 변환
-                            _foundPoint = new System.Windows.Point(
+                            FoundPoint = new System.Windows.Point(
                                 result.Point.Value.X + captureData.Bounds.Left,
                                 result.Point.Value.Y + captureData.Bounds.Top);
 
@@ -591,8 +592,9 @@ namespace Macro.Models
                     double diff = Math.Abs(currentValue - ReferenceValue.Value);
                     return diff >= Threshold;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[GrayChange] Check failed: {ex.Message}");
                     return false;
                 }
             }, token);
@@ -605,6 +607,8 @@ namespace Macro.Models
         private string _operator = "=="; // ==, !=, >, <, >=, <=, Contains
         private string _targetValue = string.Empty;
         private string _failJumpName = string.Empty;
+        private ValueSourceType _targetValueSourceType = ValueSourceType.Constant;
+        private string _targetValueVariableName = string.Empty;
 
         public string VariableName
         {
@@ -622,6 +626,18 @@ namespace Macro.Models
         {
             get => _targetValue;
             set => this.RaiseAndSetIfChanged(ref _targetValue, value);
+        }
+
+        public ValueSourceType TargetValueSourceType
+        {
+            get => _targetValueSourceType;
+            set => this.RaiseAndSetIfChanged(ref _targetValueSourceType, value);
+        }
+
+        public string TargetValueVariableName
+        {
+            get => _targetValueVariableName;
+            set => this.RaiseAndSetIfChanged(ref _targetValueVariableName, value);
         }
 
         public string FailJumpName
@@ -649,19 +665,36 @@ namespace Macro.Models
         public Guid? GetForceJumpId()
         {
             var vars = MacroEngineService.Instance.Variables;
-            string currentValue = vars.ContainsKey(VariableName) ? vars[VariableName] : string.Empty;
+            string varName = VariableName?.Trim() ?? string.Empty;
+            string currentValue = vars.TryGetValue(varName, out var val) ? val : string.Empty;
+            string resolvedTarget = TargetValue;
+            if (TargetValueSourceType == ValueSourceType.Variable && !string.IsNullOrEmpty(TargetValueVariableName))
+            {
+                string tvName = TargetValueVariableName.Trim();
+                resolvedTarget = vars.TryGetValue(tvName, out var tvVal) ? tvVal : string.Empty;
+            }
             bool isConditionMet = false;
 
             switch (Operator)
             {
-                case "==": isConditionMet = currentValue == TargetValue; break;
-                case "!=": isConditionMet = currentValue != TargetValue; break;
-                case "Contains": isConditionMet = currentValue.Contains(TargetValue); break;
+                case "==":
+                    if (double.TryParse(currentValue, out double eqCur) && double.TryParse(resolvedTarget, out double eqTar))
+                        isConditionMet = Math.Abs(eqCur - eqTar) < 0.0001;
+                    else
+                        isConditionMet = currentValue == resolvedTarget;
+                    break;
+                case "!=":
+                    if (double.TryParse(currentValue, out double neCur) && double.TryParse(resolvedTarget, out double neTar))
+                        isConditionMet = Math.Abs(neCur - neTar) >= 0.0001;
+                    else
+                        isConditionMet = currentValue != resolvedTarget;
+                    break;
+                case "Contains": isConditionMet = currentValue.Contains(resolvedTarget); break;
                 case ">":
                 case "<":
                 case ">=":
                 case "<=":
-                    if (double.TryParse(currentValue, out double cur) && double.TryParse(TargetValue, out double tar))
+                    if (double.TryParse(currentValue, out double cur) && double.TryParse(resolvedTarget, out double tar))
                     {
                         if (Operator == ">") isConditionMet = cur > tar;
                         else if (Operator == "<") isConditionMet = cur < tar;
@@ -905,6 +938,7 @@ namespace Macro.Models
 
                         var processes = System.Diagnostics.Process.GetProcessesByName(target);
                         isRunning = processes.Length > 0;
+                        foreach (var proc in processes) proc.Dispose();
                     }
                     else // WindowTitle
                     {
@@ -933,6 +967,7 @@ namespace Macro.Models
     public class TimeoutCheckCondition : ReactiveObject, IMacroCondition, ISupportCoordinateTransform
     {
         private IMacroCondition? _inner;
+        [JsonIgnore]
         public IMacroCondition? Inner => _inner;
 
         private string _startTimeVariableName;
@@ -1284,9 +1319,9 @@ namespace Macro.Models
                         // 파싱 실패 시 처리 (로그 등)
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // 변환 실패 무시
+                    System.Diagnostics.Debug.WriteLine($"[KeyPress] Execute failed: {ex.Message}");
                 }
             }, token);
         }
@@ -1435,21 +1470,22 @@ namespace Macro.Models
                 if (token.IsCancellationRequested) return;
 
                 var vars = MacroEngineService.Instance.Variables;
-                if (string.IsNullOrEmpty(VariableName)) return;
+                string varName = VariableName?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(varName)) return;
 
                 if (Operation == "Set")
                 {
-                    MacroEngineService.Instance.UpdateVariable(VariableName, Value);
+                    MacroEngineService.Instance.UpdateVariable(varName, Value);
                 }
                 else if (Operation == "Add" || Operation == "Sub")
                 {
                     double current = 0;
-                    if (vars.ContainsKey(VariableName)) double.TryParse(vars[VariableName], out current);
+                    if (vars.TryGetValue(varName, out var curStr)) double.TryParse(curStr, out current);
                     double val = 0;
                     double.TryParse(Value, out val);
 
                     double newValue = (Operation == "Add") ? (current + val) : (current - val);
-                    MacroEngineService.Instance.UpdateVariable(VariableName, newValue.ToString());
+                    MacroEngineService.Instance.UpdateVariable(varName, newValue.ToString());
                 }
             }, token);
         }
@@ -1538,6 +1574,7 @@ namespace Macro.Models
         private string _failJumpId = string.Empty;
 
         // 하위 호환성을 위해 ProcessName 속성은 유지하되 TargetName과 연동
+        [JsonIgnore]
         public string ProcessName
         {
             get => _targetName;
@@ -1588,21 +1625,28 @@ namespace Macro.Models
                 if (SearchMethod == WindowControlSearchMethod.ProcessName)
                 {
                     var processes = System.Diagnostics.Process.GetProcessesByName(TargetName);
-                    if (processes.Length == 0)
-                        throw new Exception($"Process '{TargetName}' not found.");
-
-                    // Main Window가 있는 첫 번째 프로세스 찾기
-                    foreach (var p in processes)
+                    try
                     {
-                        if (p.MainWindowHandle != IntPtr.Zero)
+                        if (processes.Length == 0)
+                            throw new Exception($"Process '{TargetName}' not found.");
+
+                        // Main Window가 있는 첫 번째 프로세스 찾기
+                        foreach (var p in processes)
                         {
-                            hWnd = p.MainWindowHandle;
-                            break;
+                            if (p.MainWindowHandle != IntPtr.Zero)
+                            {
+                                hWnd = p.MainWindowHandle;
+                                break;
+                            }
                         }
+
+                        if (hWnd == IntPtr.Zero)
+                            throw new Exception($"Process '{TargetName}' found but has no main window.");
                     }
-                    
-                    if (hWnd == IntPtr.Zero)
-                        throw new Exception($"Process '{TargetName}' found but has no main window.");
+                    finally
+                    {
+                        foreach (var proc in processes) proc.Dispose();
+                    }
                 }
                 else // WindowTitle
                 {
@@ -2066,8 +2110,9 @@ namespace Macro.Models
         private int _refWindowHeight = 1080;
         private bool _isStartGroup = false;
         private string _startJumpId = string.Empty;
+        private Guid _id = Guid.NewGuid();
 
-        public Guid Id { get; } = Guid.NewGuid(); // ISequenceTreeNode requirement
+        public Guid Id => _id;
 
         public string Name
         {
@@ -2220,6 +2265,13 @@ namespace Macro.Models
 
         [JsonIgnore]
         public bool IsGroupEnd => false;
+
+        [JsonConstructor]
+        public SequenceGroup(Guid id, string name)
+        {
+            _id = id == Guid.Empty ? Guid.NewGuid() : id;
+            _name = name ?? "Group";
+        }
 
         public SequenceGroup()
         {

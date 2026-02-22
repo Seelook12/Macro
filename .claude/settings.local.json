@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "sequential-thinking"
+  ],
+  "enableAllProjectMcpServers": true
+}

@@ -39,12 +39,12 @@ namespace Macro.Services
             new Lazy<MacroEngineService>(() => new MacroEngineService());
         public static MacroEngineService Instance => _instance.Value;
 
-        private bool _isRunning;
-        private bool _isPaused;
+        private int _isRunningFlag = 0;
+        private int _isPausedFlag = 0;
         private CancellationTokenSource? _cts;
 
         private string _currentLogFilePath = string.Empty;
-        private object _logLock = new object();
+        private readonly object _logLock = new object();
 
         // Constructor
         private MacroEngineService()
@@ -78,14 +78,22 @@ namespace Macro.Services
         // Properties
         public bool IsRunning
         {
-            get => _isRunning;
-            private set => this.RaiseAndSetIfChanged(ref _isRunning, value);
+            get => Interlocked.CompareExchange(ref _isRunningFlag, 0, 0) == 1;
+            private set
+            {
+                Interlocked.Exchange(ref _isRunningFlag, value ? 1 : 0);
+                RxApp.MainThreadScheduler.Schedule(() => this.RaisePropertyChanged(nameof(IsRunning)));
+            }
         }
 
         public bool IsPaused
         {
-            get => _isPaused;
-            private set => this.RaiseAndSetIfChanged(ref _isPaused, value);
+            get => Interlocked.CompareExchange(ref _isPausedFlag, 0, 0) == 1;
+            private set
+            {
+                Interlocked.Exchange(ref _isPausedFlag, value ? 1 : 0);
+                RxApp.MainThreadScheduler.Schedule(() => this.RaisePropertyChanged(nameof(IsPaused)));
+            }
         }
 
         public ObservableCollection<string> Logs { get; }
@@ -175,13 +183,12 @@ namespace Macro.Services
 
         public async Task RunAsync(IEnumerable<SequenceItem> sequences)
         {
-            if (IsRunning)
+            if (Interlocked.CompareExchange(ref _isRunningFlag, 1, 0) != 0)
             {
                 AddLog("이미 실행 중입니다.");
                 return;
             }
-
-            IsRunning = true;
+            RxApp.MainThreadScheduler.Schedule(() => this.RaisePropertyChanged(nameof(IsRunning)));
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
 
@@ -229,6 +236,9 @@ namespace Macro.Services
                     var sequenceList = new List<SequenceItem>(sequences);
                     int currentIndex = 0;
                     TotalStepCount = sequenceList.Count;
+                    int selfJumpCount = 0;
+                    int lastJumpIndex = -1;
+                    const int MaxSelfJumps = 10000;
 
                     while (currentIndex < sequenceList.Count)
                     {
@@ -326,7 +336,7 @@ namespace Macro.Services
                                     {
                                         try 
                                         {
-                                            ConfigureRelativeCoordinates(item);
+                                            await ConfigureRelativeCoordinates(item);
                                         }
                                         catch (Exception ex)
                                         {
@@ -544,6 +554,20 @@ namespace Macro.Services
 
                             if (targetIndex != -1)
                             {
+                                if (targetIndex == lastJumpIndex)
+                                {
+                                    selfJumpCount++;
+                                    if (selfJumpCount >= MaxSelfJumps)
+                                    {
+                                        AddLog($"    !!! 오류: 동일 스텝({sequenceList[targetIndex].Name})으로 {MaxSelfJumps}회 연속 점프 감지. 무한 루프 방지를 위해 중지합니다.");
+                                        return;
+                                    }
+                                }
+                                else
+                                {
+                                    selfJumpCount = 0;
+                                    lastJumpIndex = targetIndex;
+                                }
                                 AddLog($"    -> 점프: '{sequenceList[targetIndex].Name}'(으)로 이동 (Index: {targetIndex + 1})");
                                 currentIndex = targetIndex;
                             }
@@ -608,7 +632,7 @@ namespace Macro.Services
                     // 1. 좌표계 설정
                     if (item.CoordinateMode == CoordinateMode.WindowRelative)
                     {
-                        ConfigureRelativeCoordinates(item);
+                        await ConfigureRelativeCoordinates(item);
                     }
                     else
                     {
@@ -672,10 +696,11 @@ namespace Macro.Services
 
         public void Stop()
         {
-            if (_cts != null && !_cts.IsCancellationRequested)
+            var cts = _cts;
+            if (cts != null && !cts.IsCancellationRequested)
             {
                 AddLog("중지 요청 확인... (정지 중)");
-                _cts.Cancel();
+                cts.Cancel();
             }
         }
 
@@ -710,7 +735,10 @@ namespace Macro.Services
                     {
                         System.IO.File.AppendAllText(_currentLogFilePath, timeStampedMessage + Environment.NewLine);
                     }
-                    catch { /* Ignore file errors to prevent app crash */ }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"File logging failed: {ex.Message}");
+                    }
                 }
             }
 
@@ -740,6 +768,12 @@ namespace Macro.Services
             }
         }
 
+        public void UpdateVariableWithoutSave(string name, string value)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            Variables[name] = value;
+        }
+
         private string GetTypeName(object obj)
         {
             return obj.GetType().Name;
@@ -752,7 +786,7 @@ namespace Macro.Services
             if (item.PostCondition is ISupportCoordinateTransform post) post.SetTransform(1.0, 1.0, 0, 0);
         }
 
-        private void ConfigureRelativeCoordinates(SequenceItem item)
+        private async Task ConfigureRelativeCoordinates(SequenceItem item)
         {
             // [Target Source Resolve]
             string targetName = string.Empty;
@@ -777,21 +811,28 @@ namespace Macro.Services
             if (item.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
             {
                 var processes = System.Diagnostics.Process.GetProcessesByName(targetName);
-                if (processes.Length == 0)
-                    throw new Exception($"Process '{targetName}' not found.");
-
-                // Main Window가 있는 첫 번째 프로세스 찾기
-                foreach (var p in processes)
+                try
                 {
-                    if (p.MainWindowHandle != IntPtr.Zero)
+                    if (processes.Length == 0)
+                        throw new Exception($"Process '{targetName}' not found.");
+
+                    // Main Window가 있는 첫 번째 프로세스 찾기
+                    foreach (var p in processes)
                     {
-                        hWnd = p.MainWindowHandle;
-                        break;
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            hWnd = p.MainWindowHandle;
+                            break;
+                        }
                     }
+
+                    if (hWnd == IntPtr.Zero)
+                        throw new Exception($"Process '{targetName}' found but has no main window.");
                 }
-                
-                if (hWnd == IntPtr.Zero)
-                    throw new Exception($"Process '{targetName}' found but has no main window.");
+                finally
+                {
+                    foreach (var proc in processes) proc.Dispose();
+                }
             }
             else // WindowTitle
             {
@@ -835,7 +876,7 @@ namespace Macro.Services
             {
                 AddLog($"[Debug] 윈도우 상태 변경 시도: {item.ContextWindowState}");
                 InputHelper.ShowWindow(hWnd, nCmdShow);
-                Thread.Sleep(500); // Wait for animation
+                await Task.Delay(500); // Wait for animation
             }
 
             if (item.ContextWindowState != WindowControlState.Minimize)

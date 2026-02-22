@@ -1,13 +1,16 @@
 using ReactiveUI;
 using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using Macro.Utils;
 using System;
 
 namespace Macro.ViewModels
 {
-    public class MainWindowViewModel : ReactiveObject, IScreen
+    public class MainWindowViewModel : ReactiveObject, IScreen, IDisposable
     {
         private string _currentRecipeName = "선택된 레시피 없음";
+        private readonly CompositeDisposable _disposables = new CompositeDisposable();
 
         // 화면 전환 상태를 관리하는 라우터
         public RoutingState Router { get; } = new RoutingState();
@@ -37,7 +40,7 @@ namespace Macro.ViewModels
             RecipeVM = new RecipeViewModel(this);
             TeachingVM = new TeachingViewModel(this);
             // TeachingVM의 변수 컬렉션을 공유하여 데이터 동기화
-            VariableManagerVM = new VariableManagerViewModel(this, TeachingVM.DefinedVariables);
+            VariableManagerVM = new VariableManagerViewModel(this, TeachingVM.DefinedVariables, TeachingVM);
 
             // 네비게이션 커맨드 설정
             GoDashboard = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(DashboardVM));
@@ -45,15 +48,27 @@ namespace Macro.ViewModels
             GoTeaching = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(TeachingVM));
             GoVariableManager = ReactiveCommand.CreateFromObservable(() => Router.Navigate.Execute(VariableManagerVM));
 
+            foreach (var cmd in new IHandleObservableErrors[] { GoDashboard, GoRecipe, GoTeaching, GoVariableManager })
+            {
+                cmd.ThrownExceptions.Subscribe(ex =>
+                    System.Diagnostics.Debug.WriteLine($"[Navigation Error] {ex.Message}"));
+            }
+
             // RecipeManager 구독하여 현재 레시피 이름 업데이트
             RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
-                .Subscribe(recipe => 
+                .Subscribe(recipe =>
                 {
                     CurrentRecipeName = recipe != null ? $"현재 레시피: {recipe.FileName}" : "선택된 레시피 없음";
-                });
+                })
+                .DisposeWith(_disposables);
 
             // 앱 시작 시 대시보드 화면으로 이동
             Router.Navigate.Execute(DashboardVM);
+        }
+
+        public void Dispose()
+        {
+            _disposables.Dispose();
         }
 
         #region Hotkey Settings
@@ -63,25 +78,25 @@ namespace Macro.ViewModels
             var hotkey = Macro.Services.HotkeyService.Instance;
 
             // F5: Start (VK_F5 = 0x74)
-            hotkey.RegisterHotkey(9001, 0, 0x74);
+            hotkey.RegisterHotkey(Macro.Services.HotkeyService.HOTKEY_ID_START, 0, 0x74);
 
             // F6: Stop (VK_F6 = 0x75)
-            hotkey.RegisterHotkey(9002, 0, 0x75);
+            hotkey.RegisterHotkey(Macro.Services.HotkeyService.HOTKEY_ID_STOP, 0, 0x75);
 
             // F7: Pause (VK_F7 = 0x76)
-            hotkey.RegisterHotkey(9003, 0, 0x76);
+            hotkey.RegisterHotkey(Macro.Services.HotkeyService.HOTKEY_ID_PAUSE, 0, 0x76);
 
             hotkey.HotkeyPressed += id =>
             {
-                if (id == 9001) // F5 (Start / Resume)
+                if (id == Macro.Services.HotkeyService.HOTKEY_ID_START) // F5 (Start / Resume)
                 {
                     DashboardVM.RunCommand.Execute().Subscribe();
                 }
-                else if (id == 9002) // F6 (Stop)
+                else if (id == Macro.Services.HotkeyService.HOTKEY_ID_STOP) // F6 (Stop)
                 {
                     DashboardVM.StopCommand.Execute().Subscribe();
                 }
-                else if (id == 9003) // F7 (Pause)
+                else if (id == Macro.Services.HotkeyService.HOTKEY_ID_PAUSE) // F7 (Pause)
                 {
                     DashboardVM.PauseCommand.Execute().Subscribe();
                 }

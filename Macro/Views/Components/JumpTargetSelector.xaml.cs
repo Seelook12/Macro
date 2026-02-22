@@ -36,6 +36,15 @@ namespace Macro.Views.Components
         public JumpTargetSelector()
         {
             InitializeComponent();
+            Unloaded += OnUnloaded;
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (ItemsSource is INotifyCollectionChanged collection)
+            {
+                collection.CollectionChanged -= OnCollectionChanged;
+            }
         }
 
         private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -126,9 +135,9 @@ namespace Macro.Views.Components
                     // This is the core of the protection logic.
                 }
             }
-            catch
+            catch (InvalidCastException)
             {
-                // Cast might fail if items are not JumpTargetViewModel
+                // ItemsSource contains non-JumpTargetViewModel items
             }
             finally
             {

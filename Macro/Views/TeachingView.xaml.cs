@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -30,179 +31,163 @@ namespace Macro.Views
             this.WhenActivated(disposables =>
             {
                 // ViewModel 바인딩
-                var d1 = this.WhenAnyValue(x => x.ViewModel)
+                this.WhenAnyValue(x => x.ViewModel)
                     .ObserveOn(RxApp.MainThreadScheduler)
-                    .Subscribe(vm => DataContext = vm);
-                disposables.Add(d1);
+                    .Subscribe(vm => DataContext = vm)
+                    .DisposeWith(disposables);
 
-                // Interaction 핸들러 등록
-                if (ViewModel != null)
-                {
-                    var d2 = ViewModel.GetCoordinateInteraction.RegisterHandler(async ctx =>
+                // Interaction 핸들러 등록: ViewModel이 설정될 때까지 대기
+                var interactionSub = new CompositeDisposable().DisposeWith(disposables);
+
+                this.WhenAnyValue(x => x.ViewModel)
+                    .WhereNotNull()
+                    .Take(1)
+                    .Subscribe(vm =>
                     {
-                        var mainWindow = System.Windows.Application.Current.MainWindow;
-                        if (mainWindow == null) return;
-                        try
+                        vm.GetCoordinateInteraction.RegisterHandler(async ctx =>
                         {
-                            mainWindow.WindowState = WindowState.Minimized;
-                            await Task.Delay(300);
-
-                            var capture = ScreenCaptureHelper.GetScreenCapture();
-                            var bounds = ScreenCaptureHelper.GetScreenBounds();
-                            
-                            if (capture == null) return;
-
-                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
-                            
-                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
-                            var picker = new CoordinatePickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
-                            var result = picker.ShowDialog();
-
-                            if (result == true && picker.SelectedPoint.HasValue)
+                            var mainWindow = System.Windows.Application.Current.MainWindow;
+                            if (mainWindow == null) return;
+                            try
                             {
-                                // 이미 물리 픽셀 좌표이므로 그대로 반환
-                                ctx.SetOutput(picker.SelectedPoint.Value);
-                            }
-                            else
-                            {
-                                ctx.SetOutput(null);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Coordinate Pick Failed: {ex}");
-                            ctx.SetOutput(null);
-                        }
-                        finally
-                        {
-                            mainWindow.WindowState = WindowState.Normal;
-                            mainWindow.Activate();
-                        }
-                    });
-                    disposables.Add(d2);
+                                mainWindow.WindowState = WindowState.Minimized;
+                                await Task.Delay(300);
 
-                    var d3 = ViewModel.GetRegionInteraction.RegisterHandler(async ctx =>
-                    {
-                        var mainWindow = System.Windows.Application.Current.MainWindow;
-                        if (mainWindow == null) return;
-                        try
-                        {
-                            mainWindow.WindowState = WindowState.Minimized;
-                            await Task.Delay(300);
+                                var capture = ScreenCaptureHelper.GetScreenCapture();
+                                var bounds = ScreenCaptureHelper.GetScreenBounds();
 
-                            var capture = ScreenCaptureHelper.GetScreenCapture();
-                            var bounds = ScreenCaptureHelper.GetScreenBounds();
-                            
-                            if (capture == null) return;
+                                if (capture == null) return;
 
-                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
+                                var picker = new CoordinatePickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+                                var result = picker.ShowDialog();
 
-                            // RegionPickerWindow도 물리 좌표계 기준으로 생성 필요 (추후 수정 필요할 수 있음)
-                            // 현재는 생성자 변경 없이 사용하되, 반환값 처리를 물리 픽셀로 가정
-                            // NOTE: RegionPickerWindow도 CoordinatePickerWindow처럼 수정해야 완벽함.
-                            // 우선 기존 생성자 사용하되, 내부 로직 확인 필요.
-                            
-                            // RegionPickerWindow가 아직 수정을 안 거쳤다면, 물리 좌표계 적용이 안 될 수 있음.
-                            // 일단 여기서는 RegionPickerWindow도 수정되었다고 가정하고(또는 수정해야 함) 진행.
-                            var picker = new RegionPickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
-                            var result = picker.ShowDialog();
-
-                            if (result == true)
-                            {
-                                // Picker가 물리 픽셀 Rect를 반환한다고 가정
-                                ctx.SetOutput(picker.SelectedRegion);
-                            }
-                            else
-                            {
-                                ctx.SetOutput(null);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Region Pick Failed: {ex}");
-                            ctx.SetOutput(null);
-                        }
-                        finally
-                        {
-                            mainWindow.WindowState = WindowState.Normal;
-                            mainWindow.Activate();
-                        }
-                    });
-                    disposables.Add(d3);
-
-                    var d4 = ViewModel.CaptureImageInteraction.RegisterHandler(async ctx =>
-                    {
-                        var mainWindow = System.Windows.Application.Current.MainWindow;
-                        if (mainWindow == null) return;
-                        try
-                        {
-                            mainWindow.WindowState = WindowState.Minimized;
-                            await Task.Delay(300);
-                            
-                            var capture = ScreenCaptureHelper.GetScreenCapture();
-                            var bounds = ScreenCaptureHelper.GetScreenBounds();
-                            
-                            if (capture == null) return;
-
-                            // CoordinatePickerWindow를 물리 좌표계 기준으로 생성
-                            
-                            var picker = new RegionPickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
-                            var result = picker.ShowDialog();
-
-                            if (result == true)
-                            {
-                                var rect = picker.SelectedRegion;
-                                
-                                // rect는 화면 절대 물리 좌표 (음수 포함)
-                                // CroppedBitmap을 위해 비트맵 내부 로컬 좌표로 변환 (0,0 기준)
-                                int localX = (int)(rect.X - bounds.Left);
-                                int localY = (int)(rect.Y - bounds.Top);
-                                int localW = (int)rect.Width;
-                                int localH = (int)rect.Height;
-                                
-                                // 범위 체크
-                                if (localX < 0) localX = 0;
-                                if (localY < 0) localY = 0;
-                                if (localX + localW > capture.PixelWidth) localW = capture.PixelWidth - localX;
-                                if (localY + localH > capture.PixelHeight) localH = capture.PixelHeight - localY;
-
-                                if (localW > 0 && localH > 0)
+                                if (result == true && picker.SelectedPoint.HasValue)
                                 {
-                                    var cropped = new CroppedBitmap(capture, 
-                                        new Int32Rect(localX, localY, localW, localH));
-
-                                    var tempPath = Path.GetTempFileName().Replace(".tmp", ".png");
-                                    using (var fileStream = new FileStream(tempPath, FileMode.Create))
-                                    {
-                                        var encoder = new PngBitmapEncoder();
-                                        encoder.Frames.Add(BitmapFrame.Create(cropped));
-                                        encoder.Save(fileStream);
-                                    }
-                                    ctx.SetOutput(tempPath);
+                                    ctx.SetOutput(picker.SelectedPoint.Value);
                                 }
                                 else
                                 {
                                     ctx.SetOutput(null);
                                 }
                             }
-                            else
+                            catch (Exception ex)
                             {
+                                System.Diagnostics.Debug.WriteLine($"Coordinate Pick Failed: {ex}");
                                 ctx.SetOutput(null);
                             }
-                        }
-                        catch (Exception ex)
+                            finally
+                            {
+                                mainWindow.WindowState = WindowState.Normal;
+                                mainWindow.Activate();
+                            }
+                        }).DisposeWith(interactionSub);
+
+                        vm.GetRegionInteraction.RegisterHandler(async ctx =>
                         {
-                            System.Diagnostics.Debug.WriteLine($"Capture Image Failed: {ex}");
-                            ctx.SetOutput(null);
-                        }
-                        finally
+                            var mainWindow = System.Windows.Application.Current.MainWindow;
+                            if (mainWindow == null) return;
+                            try
+                            {
+                                mainWindow.WindowState = WindowState.Minimized;
+                                await Task.Delay(300);
+
+                                var capture = ScreenCaptureHelper.GetScreenCapture();
+                                var bounds = ScreenCaptureHelper.GetScreenBounds();
+
+                                if (capture == null) return;
+
+                                var picker = new RegionPickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+                                var result = picker.ShowDialog();
+
+                                if (result == true)
+                                {
+                                    ctx.SetOutput(picker.SelectedRegion);
+                                }
+                                else
+                                {
+                                    ctx.SetOutput(null);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Region Pick Failed: {ex}");
+                                ctx.SetOutput(null);
+                            }
+                            finally
+                            {
+                                mainWindow.WindowState = WindowState.Normal;
+                                mainWindow.Activate();
+                            }
+                        }).DisposeWith(interactionSub);
+
+                        vm.CaptureImageInteraction.RegisterHandler(async ctx =>
                         {
-                            mainWindow.WindowState = WindowState.Normal;
-                            mainWindow.Activate();
-                        }
-                    });
-                    disposables.Add(d4);
-                }
+                            var mainWindow = System.Windows.Application.Current.MainWindow;
+                            if (mainWindow == null) return;
+                            try
+                            {
+                                mainWindow.WindowState = WindowState.Minimized;
+                                await Task.Delay(300);
+
+                                var capture = ScreenCaptureHelper.GetScreenCapture();
+                                var bounds = ScreenCaptureHelper.GetScreenBounds();
+
+                                if (capture == null) return;
+
+                                var picker = new RegionPickerWindow(capture, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+                                var result = picker.ShowDialog();
+
+                                if (result == true)
+                                {
+                                    var rect = picker.SelectedRegion;
+
+                                    int localX = (int)(rect.X - bounds.Left);
+                                    int localY = (int)(rect.Y - bounds.Top);
+                                    int localW = (int)rect.Width;
+                                    int localH = (int)rect.Height;
+
+                                    if (localX < 0) localX = 0;
+                                    if (localY < 0) localY = 0;
+                                    if (localX + localW > capture.PixelWidth) localW = capture.PixelWidth - localX;
+                                    if (localY + localH > capture.PixelHeight) localH = capture.PixelHeight - localY;
+
+                                    if (localW > 0 && localH > 0)
+                                    {
+                                        var cropped = new CroppedBitmap(capture,
+                                            new Int32Rect(localX, localY, localW, localH));
+
+                                        var tempPath = Path.GetTempFileName().Replace(".tmp", ".png");
+                                        using (var fileStream = new FileStream(tempPath, FileMode.Create))
+                                        {
+                                            var encoder = new PngBitmapEncoder();
+                                            encoder.Frames.Add(BitmapFrame.Create(cropped));
+                                            encoder.Save(fileStream);
+                                        }
+                                        ctx.SetOutput(tempPath);
+                                    }
+                                    else
+                                    {
+                                        ctx.SetOutput(null);
+                                    }
+                                }
+                                else
+                                {
+                                    ctx.SetOutput(null);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Capture Image Failed: {ex}");
+                                ctx.SetOutput(null);
+                            }
+                            finally
+                            {
+                                mainWindow.WindowState = WindowState.Normal;
+                                mainWindow.Activate();
+                            }
+                        }).DisposeWith(interactionSub);
+                    })
+                    .DisposeWith(disposables);
             });
         }
 

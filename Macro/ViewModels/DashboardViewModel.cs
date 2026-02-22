@@ -4,6 +4,8 @@ using ReactiveUI;
 using System;
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using System.Windows;
 using Macro.Models;
@@ -13,13 +15,21 @@ using System.Text.Json;
 
 namespace Macro.ViewModels
 {
-    public class DashboardViewModel : ReactiveObject, IRoutableViewModel
+    public class DashboardViewModel : ReactiveObject, IRoutableViewModel, IActivatableViewModel
     {
         // URL 경로 세그먼트 (라우팅 식별자)
         public string UrlPathSegment => "Dashboard";
 
         // 호스트 스크린 (메인 윈도우)
         public IScreen HostScreen { get; }
+
+        public ViewModelActivator Activator { get; } = new ViewModelActivator();
+
+        private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNameCaseInsensitive = true
+        };
 
         // Services
         private readonly MacroEngineService _engineService;
@@ -56,7 +66,7 @@ namespace Macro.ViewModels
             get => _activeTimeouts;
             set => this.RaiseAndSetIfChanged(ref _activeTimeouts, value);
         }
-        
+
         // Detailed Step Status Properties
         private string _preConditionStatus = "대기";
         public string PreConditionStatus
@@ -84,28 +94,44 @@ namespace Macro.ViewModels
             HostScreen = screen;
             _engineService = MacroEngineService.Instance;
 
-            // Timer for Active Timeouts & Step Status Update (100ms for smoother delay timer)
-            Observable.Interval(TimeSpan.FromMilliseconds(100))
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .Subscribe(_ =>
-                {
-                    if (IsRunning)
+            // Timer: WhenActivated로 View 활성화 시에만 실행
+            this.WhenActivated(disposables =>
+            {
+                Observable.Interval(TimeSpan.FromMilliseconds(100))
+                    .ObserveOn(RxApp.MainThreadScheduler)
+                    .Subscribe(_ =>
                     {
-                        // 1. Update Timeouts
-                        var statusList = _engineService.GetActiveTimeouts();
-                        ActiveTimeouts = new ObservableCollection<TimeoutStatus>(statusList);
+                        if (IsRunning)
+                        {
+                            // 1. Update Timeouts (Smart Update: 변경 시에만 교체)
+                            var statusList = _engineService.GetActiveTimeouts();
+                            if (!TimeoutListEquals(ActiveTimeouts, statusList))
+                            {
+                                ActiveTimeouts = new ObservableCollection<TimeoutStatus>(statusList);
+                            }
 
-                        // 2. Update Step Status
-                        UpdateStepStatus();
-                    }
-                    else
-                    {
-                        if (ActiveTimeouts.Count > 0) ActiveTimeouts.Clear();
-                        PreConditionStatus = "대기";
-                        ActionStatus = "대기";
-                        PostConditionStatus = "대기";
-                    }
-                });
+                            // 2. Update Step Status
+                            UpdateStepStatus();
+                        }
+                        else
+                        {
+                            if (ActiveTimeouts.Count > 0) ActiveTimeouts.Clear();
+                            PreConditionStatus = "대기";
+                            ActionStatus = "대기";
+                            PostConditionStatus = "대기";
+                        }
+                    })
+                    .DisposeWith(disposables);
+
+                Disposable.Create(() =>
+                {
+                    // View 비활성화 시 상태 초기화
+                    if (ActiveTimeouts.Count > 0) ActiveTimeouts.Clear();
+                    PreConditionStatus = "대기";
+                    ActionStatus = "대기";
+                    PostConditionStatus = "대기";
+                }).DisposeWith(disposables);
+            });
 
             // IsRunning 상태 동기화
             _isRunning = _engineService
@@ -144,7 +170,7 @@ namespace Macro.ViewModels
             // RunCommand: 실행 중이 아닐 때 OR (실행 중 AND 일시정지 중)일 때 가능
             var canRun = _engineService.WhenAnyValue(x => x.IsRunning, x => x.IsPaused)
                 .Select(t => !t.Item1 || t.Item2);
-            
+
             RunCommand = ReactiveCommand.CreateFromTask(async () =>
             {
                 // 이미 실행 중이고 일시정지 상태라면 -> Resume
@@ -155,7 +181,7 @@ namespace Macro.ViewModels
                 }
 
                 var currentRecipe = RecipeManager.Instance.CurrentRecipe;
-                
+
                 // 1. 레시피 선택 여부 확인
                 if (currentRecipe == null || string.IsNullOrEmpty(currentRecipe.FilePath))
                 {
@@ -181,17 +207,13 @@ namespace Macro.ViewModels
                         return;
                     }
 
-                    var options = new JsonSerializerOptions
-                    {
-                        WriteIndented = true,
-                        PropertyNameCaseInsensitive = true
-                    };
+                    var options = _jsonOptions;
 
                     try
                     {
                         // A. Try Loading as Group List (New Format)
                         var loadedGroups = JsonSerializer.Deserialize<List<SequenceGroup>>(json, options);
-                        
+
                         // Check if it's really a group list (check first item)
                         if (loadedGroups != null && loadedGroups.Count > 0)
                         {
@@ -242,11 +264,33 @@ namespace Macro.ViewModels
 
             // StopCommand: 실행 중일 때만 가능
             var canStop = _engineService.WhenAnyValue(x => x.IsRunning);
-            
+
             StopCommand = ReactiveCommand.Create(() =>
             {
                 _engineService.Stop();
             }, canStop);
+
+            foreach (var cmd in new IHandleObservableErrors[] { RunCommand, PauseCommand, StopCommand })
+            {
+                cmd.ThrownExceptions.Subscribe(ex =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Command Error] {ex.Message}");
+                    _engineService.AddLog($"[Error] {ex.Message}");
+                });
+            }
+        }
+
+        private static bool TimeoutListEquals(ObservableCollection<TimeoutStatus> current, List<TimeoutStatus> newList)
+        {
+            if (current.Count != newList.Count) return false;
+            for (int i = 0; i < current.Count; i++)
+            {
+                if (current[i].GroupName != newList[i].GroupName ||
+                    Math.Abs(current[i].ElapsedMs - newList[i].ElapsedMs) > 50 ||
+                    Math.Abs(current[i].TotalMs - newList[i].TotalMs) > 0.1)
+                    return false;
+            }
+            return true;
         }
 
         private void UpdateStepStatus()
@@ -271,7 +315,7 @@ namespace Macro.ViewModels
 
             // Type Check
             string typeName = component.GetType().Name.Replace("Condition", "").Replace("Action", "");
-            
+
             // Special Handling for Delay
             if (component is DelayCondition delay)
             {
@@ -280,7 +324,7 @@ namespace Macro.ViewModels
                     var elapsed = (DateTime.Now - delay.StartTime.Value).TotalMilliseconds;
                     // Use RuntimeDelayMs if set (non-zero), otherwise fallback to DelayTimeMs
                     double totalMs = delay.RuntimeDelayMs > 0 ? delay.RuntimeDelayMs : delay.DelayTimeMs;
-                    
+
                     var remaining = Math.Max(0, totalMs - elapsed);
                     return $"{typeName}: {elapsed/1000.0:F1}s / {totalMs/1000.0:F1}s";
                 }
@@ -297,7 +341,7 @@ namespace Macro.ViewModels
             // General Handling
             if (isCurrent) return $"{typeName}: 진행 중...";
             if (isPast) return $"{typeName}: 완료";
-            
+
             return $"{typeName}: 대기";
         }
     }

@@ -503,7 +503,10 @@ namespace Macro.ViewModels
                                         Groups.Add(defaultGroup);
                                     }
                                 }
-                                catch { }
+                                catch (Exception ex2)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[Teaching] Legacy format load failed: {ex2.Message}");
+                                }
                             }
                         }
                     }
@@ -693,7 +696,10 @@ namespace Macro.ViewModels
                         foreach (var v in vars) DefinedVariables.Add(v);
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Teaching] LoadVariables failed: {ex.Message}");
+                }
             }
         }
 
@@ -707,18 +713,20 @@ namespace Macro.ViewModels
                 var json = JsonSerializer.Serialize(DefinedVariables, GetJsonOptions());
                 File.WriteAllText(varsPath, json);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Teaching] SaveVariables failed: {ex.Message}");
+            }
         }
 
-        private JsonSerializerOptions GetJsonOptions()
+        private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
-            return new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNameCaseInsensitive = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-        }
+            WriteIndented = true,
+            PropertyNameCaseInsensitive = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+
+        private JsonSerializerOptions GetJsonOptions() => _jsonOptions;
 
         public SequenceGroup? FindParentGroup(ISequenceTreeNode? item)
         {
@@ -892,16 +900,24 @@ namespace Macro.ViewModels
         {
             string targetName = string.Empty;
 
-            // [Fix] Support Variable Source for Teaching Context
             if (group.TargetNameSource == ProcessNameSource.Variable)
             {
                 if (!string.IsNullOrEmpty(group.TargetProcessNameVariable))
                 {
-                    // Try to find default value from DefinedVariables
-                    var defVar = DefinedVariables.FirstOrDefault(v => v.Name == group.TargetProcessNameVariable);
-                    if (defVar != null)
+                    string varName = group.TargetProcessNameVariable.Trim();
+                    // 1. 엔진 런타임 변수에서 검색
+                    if (MacroEngineService.Instance.Variables.TryGetValue(varName, out var runtimeVal) && !string.IsNullOrEmpty(runtimeVal))
                     {
-                        targetName = defVar.DefaultValue;
+                        targetName = runtimeVal;
+                    }
+                    // 2. 전역 변수 기본값에서 검색
+                    else
+                    {
+                        var defVar = DefinedVariables.FirstOrDefault(v => v.Name == varName);
+                        if (defVar != null && !string.IsNullOrEmpty(defVar.DefaultValue))
+                        {
+                            targetName = defVar.DefaultValue;
+                        }
                     }
                 }
             }
@@ -916,7 +932,12 @@ namespace Macro.ViewModels
             if (group.ContextSearchMethod == WindowControlSearchMethod.ProcessName)
             {
                 var processes = System.Diagnostics.Process.GetProcessesByName(targetName);
-                foreach (var p in processes) { if (p.MainWindowHandle != IntPtr.Zero) { hWnd = p.MainWindowHandle; break; } }
+                foreach (var p in processes)
+                {
+                    if (hWnd == IntPtr.Zero && p.MainWindowHandle != IntPtr.Zero)
+                        hWnd = p.MainWindowHandle;
+                    p.Dispose();
+                }
             }
             else { hWnd = InputHelper.FindWindowByTitle(targetName); }
             if (hWnd == IntPtr.Zero) return null;
@@ -1058,7 +1079,10 @@ namespace Macro.ViewModels
                                     }
                                 }
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[Teaching] Template size read failed: {ex.Message}");
+                            }
 
                             int scaledW = (int)(tW * scaleX);
                             int scaledH = (int)(tH * scaleY);

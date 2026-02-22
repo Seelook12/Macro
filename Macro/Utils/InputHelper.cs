@@ -16,10 +16,10 @@ namespace Macro.Utils
         private static extern bool GetCursorPos(out POINT lpPoint);
 
         [DllImport("user32.dll")]
-        private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+        private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 
         [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         [DllImport("user32.dll")]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -153,9 +153,9 @@ namespace Macro.Utils
                 bool ctrlPressed = (shiftState & 2) != 0;
                 bool altPressed = (shiftState & 4) != 0;
 
-                if (shiftPressed) keybd_event(0x10, 0, 0, 0); // Shift Down
-                if (ctrlPressed) keybd_event(0x11, 0, 0, 0);  // Ctrl Down
-                if (altPressed) keybd_event(0x12, 0, 0, 0);   // Alt Down
+                if (shiftPressed) keybd_event(0x10, 0, 0, UIntPtr.Zero); // Shift Down
+                if (ctrlPressed) keybd_event(0x11, 0, 0, UIntPtr.Zero);  // Ctrl Down
+                if (altPressed) keybd_event(0x12, 0, 0, UIntPtr.Zero);   // Alt Down
                 
                 if (shiftPressed || ctrlPressed || altPressed) Thread.Sleep(10);
 
@@ -163,9 +163,9 @@ namespace Macro.Utils
 
                 if (shiftPressed || ctrlPressed || altPressed) Thread.Sleep(10);
 
-                if (altPressed) keybd_event(0x12, 0, KEYEVENTF_KEYUP, 0);   // Alt Up
-                if (ctrlPressed) keybd_event(0x11, 0, KEYEVENTF_KEYUP, 0);  // Ctrl Up
-                if (shiftPressed) keybd_event(0x10, 0, KEYEVENTF_KEYUP, 0); // Shift Up
+                if (altPressed) keybd_event(0x12, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);   // Alt Up
+                if (ctrlPressed) keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);  // Ctrl Up
+                if (shiftPressed) keybd_event(0x10, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // Shift Up
 
                 Thread.Sleep(intervalMs);
             }
@@ -223,16 +223,14 @@ namespace Macro.Utils
             return (0, 0);
         }
 
-        private static readonly Random _random = new Random();
-
         /// <summary>
         /// 마우스를 부드럽게 이동시키고 랜덤한 지연을 섞어 클릭을 수행합니다.
         /// </summary>
         public static void MoveAndClick(int x, int y, string clickType)
         {
             // 1. 목표 좌표에 아주 미세한 랜덤 오차 추가 (±1 픽셀)
-            int targetX = x + _random.Next(-1, 2);
-            int targetY = y + _random.Next(-1, 2);
+            int targetX = x + Random.Shared.Next(-1, 2);
+            int targetY = y + Random.Shared.Next(-1, 2);
 
             // 2. 현재 위치 가져오기
             GetCursorPos(out POINT startPoint);
@@ -241,7 +239,7 @@ namespace Macro.Utils
             SmoothMove(startPoint.X, startPoint.Y, targetX, targetY);
             
             // 이동 후 잠시 멈춤 (사람이 목표를 확인하는 짧은 시간)
-            Thread.Sleep(_random.Next(50, 150));
+            Thread.Sleep(Random.Shared.Next(50, 150));
 
             // 4. 클릭 수행 (랜덤한 클릭 유지 시간 적용)
             switch (clickType?.ToLower())
@@ -252,7 +250,7 @@ namespace Macro.Utils
 
                 case "double":
                     PerformClick(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
-                    Thread.Sleep(_random.Next(100, 200)); // 더블 클릭 사이의 랜덤 간격
+                    Thread.Sleep(Random.Shared.Next(100, 200)); // 더블 클릭 사이의 랜덤 간격
                     PerformClick(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
                     break;
 
@@ -265,7 +263,7 @@ namespace Macro.Utils
 
         private static void SmoothMove(int startX, int startY, int endX, int endY)
         {
-            int steps = _random.Next(10, 20); // 이동 단계 수
+            int steps = Random.Shared.Next(10, 20); // 이동 단계 수
             for (int i = 1; i <= steps; i++)
             {
                 // 선형 보간에 약간의 랜덤성을 섞어 곡선 느낌 유도
@@ -277,7 +275,7 @@ namespace Macro.Utils
                 int curY = (int)(startY + (endY - startY) * t);
 
                 SetCursorPos(curX, curY);
-                Thread.Sleep(_random.Next(5, 15)); // 각 단계별 미세 대기
+                Thread.Sleep(Random.Shared.Next(5, 15)); // 각 단계별 미세 대기
             }
             // 최종 위치 보정
             SetCursorPos(endX, endY);
@@ -285,9 +283,9 @@ namespace Macro.Utils
 
         private static void PerformClick(uint downFlag, uint upFlag)
         {
-            mouse_event(downFlag, 0, 0, 0, 0);
-            Thread.Sleep(_random.Next(30, 80)); // 버튼을 누르고 있는 시간 (랜덤)
-            mouse_event(upFlag, 0, 0, 0, 0);
+            mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
+            Thread.Sleep(Random.Shared.Next(30, 80)); // 버튼을 누르고 있는 시간 (랜덤)
+            mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
         }
 
         public static void PressKey(byte virtualKey, int durationMs = 0)
@@ -302,7 +300,7 @@ namespace Macro.Utils
                 flags |= KEYEVENTF_EXTENDEDKEY;
             }
 
-            keybd_event(virtualKey, scanCode, flags, 0);
+            keybd_event(virtualKey, scanCode, flags, UIntPtr.Zero);
             
             // 지정된 시간이 있으면 그만큼 대기, 없으면 랜덤 클릭
             if (durationMs > 0)
@@ -311,10 +309,10 @@ namespace Macro.Utils
             }
             else
             {
-                Thread.Sleep(_random.Next(30, 70));
+                Thread.Sleep(Random.Shared.Next(30, 70));
             }
 
-            keybd_event(virtualKey, scanCode, flags | KEYEVENTF_KEYUP, 0);
+            keybd_event(virtualKey, scanCode, flags | KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
 
         private static bool IsExtendedKey(byte vk)

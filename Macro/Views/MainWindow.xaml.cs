@@ -34,9 +34,9 @@ namespace Macro.Views
         protected override void OnClosed(EventArgs e)
         {
             // 등록된 단축키 해제
-            Macro.Services.HotkeyService.Instance.UnregisterHotkey(9001);
-            Macro.Services.HotkeyService.Instance.UnregisterHotkey(9002);
-            Macro.Services.HotkeyService.Instance.UnregisterHotkey(9003);
+            Macro.Services.HotkeyService.Instance.UnregisterHotkey(Macro.Services.HotkeyService.HOTKEY_ID_START);
+            Macro.Services.HotkeyService.Instance.UnregisterHotkey(Macro.Services.HotkeyService.HOTKEY_ID_STOP);
+            Macro.Services.HotkeyService.Instance.UnregisterHotkey(Macro.Services.HotkeyService.HOTKEY_ID_PAUSE);
 
             base.OnClosed(e);
         }

@@ -237,13 +237,14 @@ namespace Macro.Services
             }
         }
 
+        private static readonly JsonSerializerOptions _cloneOptions = new JsonSerializerOptions { WriteIndented = false };
+
         private SequenceItem? CloneItem(SequenceItem item)
         {
             try
             {
-                var options = new JsonSerializerOptions { WriteIndented = false };
-                var json = JsonSerializer.Serialize(item, options);
-                return JsonSerializer.Deserialize<SequenceItem>(json, options);
+                var json = JsonSerializer.Serialize(item, _cloneOptions);
+                return JsonSerializer.Deserialize<SequenceItem>(json, _cloneOptions);
             }
             catch (Exception ex)
             {
@@ -272,7 +273,7 @@ namespace Macro.Services
             {
                 foreach (var iv in group.IntVariables)
                 {
-                    MacroEngineService.Instance.UpdateVariable(iv.Name, iv.Value.ToString());
+                    MacroEngineService.Instance.UpdateVariableWithoutSave(iv.Name, iv.Value.ToString());
                 }
             }
         }
@@ -351,7 +352,7 @@ namespace Macro.Services
                 {
                     foreach (var iv in group.IntVariables)
                     {
-                        MacroEngineService.Instance.UpdateVariable(iv.Name, iv.Value.ToString());
+                        MacroEngineService.Instance.UpdateVariableWithoutSave(iv.Name, iv.Value.ToString());
                     }
                 }
 

@@ -64,6 +64,12 @@ namespace Macro.ViewModels
             // [Modified] 비동기 명령어로 변경
             SelectCommand = ReactiveCommand.CreateFromTask(SelectRecipeAsync, canExecute);
 
+            foreach (var cmd in new IHandleObservableErrors[] { CreateCommand, DuplicateCommand, DeleteCommand, SelectCommand })
+            {
+                cmd.ThrownExceptions.Subscribe(ex =>
+                    System.Diagnostics.Debug.WriteLine($"[Command Error] {ex.Message}"));
+            }
+
             // 경로 설정
             _recipeDirectory = RecipeManager.Instance.RecipeDir;
 

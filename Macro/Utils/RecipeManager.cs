@@ -13,10 +13,13 @@ namespace Macro.Utils
     public class RecipeManager : ReactiveObject
     {
         private static readonly RecipeManager _instance = new RecipeManager();
+        private static readonly JsonSerializerOptions _readOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        private static readonly JsonSerializerOptions _writeOptions = new JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true };
         private RecipeItem? _currentRecipe;
         private List<SequenceItem> _loadedSequences = new List<SequenceItem>();
         private readonly string _recipeDir;
         private readonly object _varFileLock = new object();
+        private readonly object _recipeFileLock = new object();
 
         public static RecipeManager Instance => _instance;
 
@@ -72,7 +75,10 @@ namespace Macro.Utils
                     };
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RecipeManager] LoadLastRecipe failed: {ex.Message}");
+            }
         }
 
         public void DuplicateRecipe(string sourceFilePath, string newName)
@@ -97,27 +103,33 @@ namespace Macro.Utils
                 {
                     File.Copy(sourceVarsPath, destVarsPath, true);
                 }
-                catch { /* Ignore var copy failures */ }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RecipeManager] Vars copy failed: {ex.Message}");
+                }
             }
         }
 
         private void LoadSequenceData(string filePath)
         {
-            try
+            lock (_recipeFileLock)
             {
-                if (File.Exists(filePath))
+                try
                 {
-                    var json = File.ReadAllText(filePath);
-                    if (!string.IsNullOrWhiteSpace(json))
+                    if (File.Exists(filePath))
                     {
-                        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        _loadedSequences = JsonSerializer.Deserialize<List<SequenceItem>>(json, options) ?? new List<SequenceItem>();
+                        var json = File.ReadAllText(filePath);
+                        if (!string.IsNullOrWhiteSpace(json))
+                        {
+                            _loadedSequences = JsonSerializer.Deserialize<List<SequenceItem>>(json, _readOptions) ?? new List<SequenceItem>();
+                        }
                     }
                 }
-            }
-            catch 
-            {
-                _loadedSequences = new List<SequenceItem>();
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RecipeManager] LoadSequenceData failed: {ex.Message}");
+                    _loadedSequences = new List<SequenceItem>();
+                }
             }
         }
 
@@ -132,7 +144,7 @@ namespace Macro.Utils
                 try
                 {
                     List<VariableDefinition> variables = new List<VariableDefinition>();
-                    var options = new JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true };
+                    var options = _writeOptions;
 
                     // 1. Read existing
                     if (File.Exists(varsPath))

@@ -380,10 +380,10 @@ namespace Macro.ViewModels
         public TeachingViewModel(IScreen screen)
         {
             HostScreen = screen;
-            
-            Groups.CollectionChanged += (s, e) => UpdateJumpTargets();
-            DefinedVariables.CollectionChanged += (s, e) => UpdateAvailableIntVariables();
-            
+
+            Groups.CollectionChanged += OnGroupsCollectionChanged;
+            DefinedVariables.CollectionChanged += OnDefinedVariablesCollectionChanged;
+
             UpdateJumpTargets();
 
             InitializeCommands();
@@ -391,12 +391,20 @@ namespace Macro.ViewModels
             // [Fix] Load Data Immediately (regardless of View activation)
             // This ensures VariableManagerVM (which shares DefinedVariables) has data even if TeachingView is not visited.
             LoadData();
-                
-            RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
+
+            _recipeSubscription = RecipeManager.Instance.WhenAnyValue(x => x.CurrentRecipe)
                 .Skip(1)
                 .ObserveOn(RxApp.MainThreadScheduler)
                 .Subscribe(_ => LoadData());
         }
+
+        private readonly IDisposable _recipeSubscription;
+
+        private void OnGroupsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+            => UpdateJumpTargets();
+
+        private void OnDefinedVariablesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+            => UpdateAvailableIntVariables();
 
         #endregion
     }

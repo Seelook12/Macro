@@ -24,12 +24,18 @@ namespace Macro.Services
         /// </summary>
         public static void ClearCache()
         {
+            var oldCache = new System.Collections.Generic.List<Mat>();
             foreach (var key in _imageCache.Keys)
             {
                 if (_imageCache.TryRemove(key, out var mat))
                 {
-                    mat?.Dispose();
+                    oldCache.Add(mat);
                 }
+            }
+            // Dispose after removal to minimize window where Mat is both removed and in-use
+            foreach (var mat in oldCache)
+            {
+                mat?.Dispose();
             }
         }
 
@@ -57,10 +63,20 @@ namespace Macro.Services
                 // 캐시에서 템플릿 이미지를 가져오거나 새로 로드
                 if (!_imageCache.TryGetValue(templatePath, out var templateMatOriginal))
                 {
-                    templateMatOriginal = Cv2.ImRead(templatePath, ImreadModes.Color);
-                    if (templateMatOriginal == null || templateMatOriginal.Empty()) return new MatchResult { Point = null, Score = 0 };
-                    _imageCache[templatePath] = templateMatOriginal;
+                    lock (_imageCache)
+                    {
+                        if (!_imageCache.TryGetValue(templatePath, out templateMatOriginal))
+                        {
+                            templateMatOriginal = Cv2.ImRead(templatePath, ImreadModes.Color);
+                            if (templateMatOriginal != null && !templateMatOriginal.Empty())
+                            {
+                                _imageCache[templatePath] = templateMatOriginal;
+                            }
+                        }
+                    }
                 }
+                
+                if (templateMatOriginal == null || templateMatOriginal.Empty()) return new MatchResult { Point = null, Score = 0 };
 
                 // 스케일링 적용 (템플릿 리사이징)
                 Mat templateMatToUse = templateMatOriginal;

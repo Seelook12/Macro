@@ -436,8 +436,31 @@
         - `TimeoutCheckCondition`에 `RuntimeTimeoutMs` 속성을 추가하여 실제 적용된 시간을 저장하고, `MacroEngineService`가 이를 참조하여 정확한 진행률을 표시하도록 개선.
         - `DelayCondition` 역시 대시보드에서 상수값(`DelayTimeMs`)만 표시되던 문제를 수정하기 위해 `RuntimeDelayMs` 속성을 추가하고 `DashboardViewModel`이 이를 참조하도록 로직 동기화.
 
+### 3.49. 전역 변수 관리자(VariableManager) UI 바인딩 수정 (2026-02-10)
+- **현상**: '전역 변수 관리' 화면 진입 시, 데이터가 로드되었음에도 리스트가 표시되지 않고 [변수 추가] 버튼 등 커맨드가 작동하지 않음.
+- **원인**: `VariableManagerView.xaml.cs`에서 `DataContext` 바인딩 로직이 누락되어, 뷰와 뷰모델 간 연결이 끊어져 있었음. (`ReactiveUserControl` 특성상 명시적 연결 필요)
+- **해결**: 
+    - `WhenActivated` 블록 내에 `this.WhenAnyValue(x => x.ViewModel).Subscribe(vm => DataContext = vm)` 로직을 추가하여 뷰모델을 데이터 컨텍스트로 명시적으로 설정.
+    - 이를 통해 DataGrid 목록 표시 및 커맨드 바인딩이 정상적으로 작동하도록 수정.
+
+### 3.50. 코드 분석 기반 종합 안정화 및 버그 수정 (2026-02-11)
+- **Critical 이슈 해결**:
+    - `SequenceGroup.Id` 역직렬화 시 새 GUID 생성 문제 수정 (`[JsonConstructor]` 적용).
+    - `ConcurrentDictionary` 경합 조건(`TryGetValue` 적용) 및 엔진/이미지 검색 서비스의 스레드 안정성 확보.
+    - `TimeoutCheckCondition` 직렬화 누락 해결 및 엔진 이중 실행/중단 경합 방지.
+    - 모든 ViewModel의 `ReactiveCommand`에 예외 처리 구독(`ThrownExceptions.Subscribe`) 추가하여 앱 크래시 방지.
+- **High/Medium 이슈 해결**:
+    - `Process.GetProcesses()` 호출 후 명시적 `Dispose()` 추가로 핸들 누수 원천 차단.
+    - `DashboardViewModel` 타이머의 메모리 누수 방지 및 `IActivatableViewModel` 패턴 준수.
+    - `TeachingViewModel` 및 `MainWindowViewModel`의 이벤트 구독 해제 로직 보강.
+    - `JsonSerializerOptions` 캐싱을 통한 성능 최적화 및 불필요한 객체 생성 방지.
+    - 로그 파일 크기 제한(1MB) 및 파일 락 추가로 시스템 안정성 향상.
+- **UI/UX 안정화**:
+    - `TeachingView`의 인터랙션 핸들러 등록 타이밍 개선 (ViewModel 지연 바인딩 대응).
+    - `WindowControlAction` 등에서 역직렬화 순서에 따른 데이터 유실 문제 수정.
+
 ## 4. 최종 빌드 상태
-- **결과**: `dotnet build` 성공 (2026-02-09)
+- **결과**: `dotnet build` 성공 (2026-02-11)
 
 
 

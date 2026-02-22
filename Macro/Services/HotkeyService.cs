@@ -6,6 +6,10 @@ namespace Macro.Services
 {
     public class HotkeyService
     {
+        public const int HOTKEY_ID_START = 9001;
+        public const int HOTKEY_ID_STOP = 9002;
+        public const int HOTKEY_ID_PAUSE = 9003;
+
         private static readonly Lazy<HotkeyService> _instance = new Lazy<HotkeyService>(() => new HotkeyService());
         public static HotkeyService Instance => _instance.Value;
 

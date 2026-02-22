@@ -1,12 +1,12 @@
 using ReactiveUI;
 using Macro.ViewModels;
 using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using System.Collections.Specialized;
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Reactive.Disposables.Fluent;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace Macro.Views
@@ -48,13 +48,15 @@ namespace Macro.Views
                     .Subscribe(vm => DataContext = vm)
                     .DisposeWith(disposables);
 
-                // 로그 자동 스크롤 로직을 ViewModel 변경에 대응하도록 개선
+                // 로그 자동 스크롤: SerialDisposable로 ViewModel 변경 시 이전 구독 자동 해제
+                var logScrollSub = new SerialDisposable().DisposeWith(disposables);
+
                 this.WhenAnyValue(x => x.ViewModel)
                     .WhereNotNull()
                     .ObserveOn(RxApp.MainThreadScheduler)
                     .Subscribe(vm =>
                     {
-                        Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
+                        logScrollSub.Disposable = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
                             h => vm.Logs.CollectionChanged += h,
                             h => vm.Logs.CollectionChanged -= h)
                             .ObserveOn(RxApp.MainThreadScheduler)
@@ -64,8 +66,7 @@ namespace Macro.Views
                                 {
                                     LogListBox.ScrollIntoView(vm.Logs[vm.Logs.Count - 1]);
                                 }
-                            })
-                            .DisposeWith(disposables);
+                            });
                     })
                     .DisposeWith(disposables);
             });

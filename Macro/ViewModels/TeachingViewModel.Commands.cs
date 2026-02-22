@@ -270,6 +270,34 @@ namespace Macro.ViewModels
             UpdateRefSizeCommand = ReactiveCommand.Create<object>(UpdateCurrentGroupReferenceSize);
             TestImageConditionCommand = ReactiveCommand.CreateFromTask<ImageMatchCondition>(TestImageConditionAsync);
             PickRegionCommand = ReactiveCommand.CreateFromTask<object>(PickRegion);
+
+            SubscribeCommandExceptions(
+                AddGroupCommand, RemoveGroupCommand, AddSequenceCommand, RemoveSequenceCommand,
+                SaveCommand, MoveGroupUpCommand, MoveGroupDownCommand, MoveSequenceUpCommand, MoveSequenceDownCommand,
+                CopySequenceCommand, PasteSequenceCommand, CopyGroupCommand, PasteGroupCommand, DuplicateGroupCommand,
+                AddSwitchCaseCommand, RemoveSwitchCaseCommand,
+                OpenVariableManagerCommand, CloseVariableManagerCommand,
+                AddVariableDefinitionCommand, RemoveVariableDefinitionCommand,
+                AddCoordinateVariableCommand, RemoveCoordinateVariableCommand,
+                AddIntVariableCommand, RemoveIntVariableCommand,
+                AddSubActionCommand, RemoveSubActionCommand,
+                RefreshTargetListCommand, RefreshContextTargetCommand,
+                PickCoordinateCommand, PickVariableCoordinateCommand,
+                SelectImageCommand, CaptureImageCommand, UpdateRefSizeCommand,
+                TestImageConditionCommand, PickRegionCommand
+            );
+        }
+
+        private static void SubscribeCommandExceptions(params IHandleObservableErrors[] commands)
+        {
+            foreach (var cmd in commands)
+            {
+                cmd.ThrownExceptions.Subscribe(ex =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Command Error] {ex.Message}");
+                    MacroEngineService.Instance.AddLog($"[Error] {ex.Message}");
+                });
+            }
         }
 
         #region Command Handlers
@@ -439,7 +467,14 @@ namespace Macro.ViewModels
                 if (action.SearchMethod == WindowControlSearchMethod.ProcessName)
                 {
                     var processes = System.Diagnostics.Process.GetProcesses();
-                    items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
+                    try
+                    {
+                        items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
+                    }
+                    finally
+                    {
+                        foreach (var p in processes) p.Dispose();
+                    }
                 }
                 else
                 {
@@ -478,7 +513,14 @@ namespace Macro.ViewModels
                 if (searchMethod == WindowControlSearchMethod.ProcessName)
                 {
                     var processes = System.Diagnostics.Process.GetProcesses();
-                    items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
+                    try
+                    {
+                        items = processes.Select(p => p.ProcessName).Distinct().OrderBy(n => n).ToList();
+                    }
+                    finally
+                    {
+                        foreach (var p in processes) p.Dispose();
+                    }
                 }
                 else
                 {
@@ -627,7 +669,8 @@ namespace Macro.ViewModels
             if (!string.IsNullOrEmpty(tempPath) && System.IO.File.Exists(tempPath))
             {
                 SaveImageToRecipe(condition, tempPath);
-                try { System.IO.File.Delete(tempPath); } catch { }
+                try { System.IO.File.Delete(tempPath); } 
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Temp file delete failed: {ex.Message}"); }
                 UpdateCurrentGroupReferenceSize(condition);
             }
         }

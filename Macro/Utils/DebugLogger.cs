@@ -8,6 +8,7 @@ namespace Macro.Utils
     {
         private static string LogFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Debug_JumpTarget_Trace.txt");
         private static object _lock = new object();
+        private const long MaxLogSize = 1024 * 1024; // 1MB
 
         public static void Log(string message)
         {
@@ -15,12 +16,18 @@ namespace Macro.Utils
             {
                 try
                 {
+                    FileInfo fi = new FileInfo(LogFilePath);
+                    if (fi.Exists && fi.Length > MaxLogSize)
+                    {
+                        File.Delete(LogFilePath);
+                    }
+
                     string logEntry = $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}";
                     File.AppendAllText(LogFilePath, logEntry, Encoding.UTF8);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore logging errors
+                    System.Diagnostics.Debug.WriteLine($"DebugLogger failed: {ex.Message}");
                 }
             }
         }
@@ -34,7 +41,10 @@ namespace Macro.Utils
                     if (File.Exists(LogFilePath))
                         File.Delete(LogFilePath);
                 }
-                catch { }
+                catch (Exception ex) 
+                { 
+                    System.Diagnostics.Debug.WriteLine($"DebugLogger Clear failed: {ex.Message}");
+                }
             }
         }
     }
